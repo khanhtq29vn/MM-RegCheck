@@ -1,0 +1,13 @@
+# Default owners for the repository
+* @khanhtq29vn
+
+# Website, Data Governance, and Leaderboard Evaluator
+/docs/ @khanhtq29vn
+/data/ @khanhtq29vn
+/submissions/ @khanhtq29vn
+/src/mmregcheck/schemas.py @khanhtq29vn
+/src/mmregcheck/evaluator.py @khanhtq29vn
+
+# Pillar 1 & Pillar 2 Algorithmic Modules (Khanh + Hoang-An)
+/src/mmregcheck/pillar1/ @khanhtq29vn
+/src/mmregcheck/pillar2/ @khanhtq29vn

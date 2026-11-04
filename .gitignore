@@ -1,0 +1,49 @@
+# =============================================================================
+# CRITICAL DATA GOVERNANCE FIREWALL (MEDREG-MM BENCHMARK PROTECTION)
+# Never allow raw datasets, clinic PII dumps, or unencrypted test labels in Git!
+# Only `data/dev_sample_5.jsonl` and AES-256 encrypted `*.enc` files are allowed.
+# =============================================================================
+data/raw/
+data/private/
+data/images/
+*ground_truth*.json
+*ground_truth*.jsonl
+*test_labels*
+*medreg_full*
+*.csv
+*.parquet
+*.xlsx
+*.sqlite
+*.db
+!data/dev_sample_5.jsonl
+!data/*.enc
+
+# Environment variables & API keys (OpenAI, Gemini, Qwen, vLLM, HF)
+.env
+.env.*
+*.pem
+*.key
+
+# Python / uv / build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+dist/
+build/
+*.egg-info/
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# JetBrains PyCharm & macOS
+.idea/*
+!.idea/runConfigurations/
+.DS_Store
+
+# Temporary bootstrap script
+bootstrap_mmregcheck_stage1.py

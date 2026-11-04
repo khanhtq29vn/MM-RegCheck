@@ -1,0 +1,31 @@
+name: Validate Leaderboard Submission
+
+on:
+  pull_request:
+    paths:
+      - "submissions/**/*.jsonl"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-submission:
+    name: Validate Submission Schema & Canary Hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install toolkit
+        run: uv sync --all-extras
+
+      - name: Validate all JSONL files in submissions/
+        run: |
+          for f in submissions/**/*.jsonl; do
+            echo "Validating $f..."
+            uv run mmregcheck validate-submission "$f"
+          done
