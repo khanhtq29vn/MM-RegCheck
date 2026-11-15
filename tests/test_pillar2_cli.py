@@ -106,13 +106,13 @@ def _write_samples(path: Path, count: int = 2) -> None:
 
 
 def _install_fakes(monkeypatch: pytest.MonkeyPatch, config: TFBearConfig) -> None:
-    def fake_build_config(**kwargs: Any) -> TFBearConfig:
+    def fake_build_pack_config(_pack: Any, **kwargs: Any) -> TFBearConfig:
         return config
 
     def fake_build_clients(_config: TFBearConfig) -> StageClients:
         return StageClients.single(_NullClient(), "test-model")
 
-    monkeypatch.setattr(cli, "_build_config", fake_build_config)
+    monkeypatch.setattr(cli, "_build_pack_config", fake_build_pack_config)
     monkeypatch.setattr(cli, "build_stage_clients", fake_build_clients)
 
 
@@ -295,6 +295,36 @@ def test_run_tfbear_prefers_each_sample_domain_when_domain_is_omitted(
     assert loaded == [
         (RegulatoryDomain.BEAUTY, "cot-sc"),
         (RegulatoryDomain.HEALTHCARE, "cot-sc"),
+    ]
+
+
+def test_run_tfbear_defaults_to_standard_and_the_sample_domain(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    samples = tmp_path / "samples.jsonl"
+    output = tmp_path / "predictions.jsonl"
+    _write_samples_for(samples, [RegulatoryDomain.BEAUTY, RegulatoryDomain.HEALTHCARE])
+    loaded: list[tuple[RegulatoryDomain, str]] = []
+    _install_pack_fakes(monkeypatch, loaded)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "run-tfbear",
+            str(samples),
+            "--base-url",
+            "https://endpoint.invalid/v1",
+            "--model",
+            "test-model",
+            "--out",
+            str(output),
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert loaded == [
+        (RegulatoryDomain.BEAUTY, "standard"),
+        (RegulatoryDomain.HEALTHCARE, "standard"),
     ]
 
 

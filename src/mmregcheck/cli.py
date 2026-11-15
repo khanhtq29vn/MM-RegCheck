@@ -51,22 +51,6 @@ def validate_submission(
     )
 
 
-def _build_config(
-    *,
-    base_url: str,
-    model: str,
-    api_key_env: str,
-    tau_posterior: float,
-    tau_delta: float,
-) -> TFBearConfig:
-    """Build the default pipeline configuration for a CLI run."""
-    return TFBearConfig(
-        endpoint=EndpointConfig(base_url=base_url, api_key_env=api_key_env, model=model),
-        tau_posterior=tau_posterior,
-        tau_delta=tau_delta,
-    )
-
-
 def _build_pack_config(
     pack: PromptPack,
     *,
@@ -157,39 +141,31 @@ def run_tfbear_command(
 ) -> None:
     """Run TF-BEAR over a samples file and write leaderboard-compatible predictions."""
     resolved_domain = _parse_domain_option(domain)
-    resolved_expansion = _parse_expansion_option(expansion)
+    resolved_expansion = _parse_expansion_option(expansion) or "standard"
     samples = load_samples(samples_path)
     predictions: list[SubmissionPrediction] = []
+    endpoint = EndpointConfig(base_url=base_url, api_key_env=api_key_env, model=model)
+    resolved_bears: dict[RegulatoryDomain, TFBear] = {}
 
-    if resolved_domain is None and resolved_expansion is None:
-        # Neither option given: keep the original domain-neutral pipeline.
-        config = _build_config(
-            base_url=base_url,
-            model=model,
-            api_key_env=api_key_env,
-            tau_posterior=tau_posterior,
-            tau_delta=tau_delta,
-        )
-        bear = TFBear(config, clients=build_stage_clients(config))
-        for sample in samples:
-            predictions.append(_predict_sample(bear, sample, close_book=close_book))
-    else:
-        endpoint = EndpointConfig(base_url=base_url, api_key_env=api_key_env, model=model)
-        resolved_bears: dict[RegulatoryDomain, TFBear] = {}
-        for sample in samples:
-            sample_domain = resolved_domain or sample.domain
-            if sample_domain not in resolved_bears:
-                pack = load_prompt_pack(sample_domain, resolved_expansion or "standard")
-                config = _build_pack_config(
-                    pack,
-                    endpoint=endpoint,
-                    tau_posterior=tau_posterior,
-                    tau_delta=tau_delta,
-                )
-                resolved_bears[sample_domain] = TFBear(config, clients=build_stage_clients(config))
-            predictions.append(
-                _predict_sample(resolved_bears[sample_domain], sample, close_book=close_book)
+    for sample in samples:
+        sample_domain = resolved_domain or sample.domain
+        if sample_domain is None:
+            raise ValueError(
+                "run-tfbear: no regulatory domain is available for sample "
+                f"{sample.sample_id!r}; pass --domain or provide a sample domain."
             )
+        if sample_domain not in resolved_bears:
+            pack = load_prompt_pack(sample_domain, resolved_expansion)
+            config = _build_pack_config(
+                pack,
+                endpoint=endpoint,
+                tau_posterior=tau_posterior,
+                tau_delta=tau_delta,
+            )
+            resolved_bears[sample_domain] = TFBear(config, clients=build_stage_clients(config))
+        predictions.append(
+            _predict_sample(resolved_bears[sample_domain], sample, close_book=close_book)
+        )
 
     out_path = Path(output)
     write_predictions(out_path, predictions)
