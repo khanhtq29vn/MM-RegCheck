@@ -512,14 +512,17 @@ def test_trace_file_records_the_header_and_every_sample(
     assert branch["predicted_verdict"] == NON.value
     assert branch["prior_prob"] == 0.500
     assert branch["posterior_prob"] == 0.950
-    assert branch["log_odds_delta"] == TFBearBranchTrace(
-        branch_id="P1",
-        strategy="R1: Strict",
-        prior_prob=0.500,
-        posterior_prob=0.950,
-        predicted_verdict=NON,
-        rationale="strict reasoning",
-    ).log_odds_delta
+    assert (
+        branch["log_odds_delta"]
+        == TFBearBranchTrace(
+            branch_id="P1",
+            strategy="R1: Strict",
+            prior_prob=0.500,
+            posterior_prob=0.950,
+            predicted_verdict=NON,
+            rationale="strict reasoning",
+        ).log_odds_delta
+    )
     assert branch["gate"] == "survived"
     assert sample["n_surviving"] == 1
     assert set(sample["usage"]) == {"prior", "expansion", "scoring", "adjudication", "explanation"}
@@ -544,9 +547,7 @@ def test_trace_file_never_contains_the_api_key_value(
     assert "sk-super-secret-value" not in trace_text
 
 
-def test_explicit_trace_path_is_honoured(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_explicit_trace_path_is_honoured(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     samples = tmp_path / "samples.jsonl"
     output = tmp_path / "predictions.jsonl"
     trace = tmp_path / "custom" / "trace.jsonl"

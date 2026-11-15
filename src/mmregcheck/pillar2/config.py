@@ -162,9 +162,7 @@ class TFBearConfig:
         self._validate_stage_keys("stage_temperature", self.stage_temperature, STAGES)
         self._validate_stage_keys("stage_top_p", self.stage_top_p, STAGES)
         self._validate_stage_keys("stage_max_tokens", self.stage_max_tokens, GENERATION_STAGES)
-        self._validate_stage_keys(
-            "stage_top_logprobs", self.stage_top_logprobs, ELICITATION_STAGES
-        )
+        self._validate_stage_keys("stage_top_logprobs", self.stage_top_logprobs, ELICITATION_STAGES)
         for name, values in (
             ("stage_temperature", self.stage_temperature),
             ("stage_top_p", self.stage_top_p),

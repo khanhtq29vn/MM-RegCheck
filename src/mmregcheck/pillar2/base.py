@@ -80,9 +80,7 @@ class BaseAdjudicationStrategy(_BaseStrategy, ABC):
     """Applies the dual-threshold gate and aggregates the surviving branches."""
 
     @abstractmethod
-    def adjudicate(
-        self, state: TFBearState, client: Any, model: str
-    ) -> TFBearAdjudicationResult:
+    def adjudicate(self, state: TFBearState, client: Any, model: str) -> TFBearAdjudicationResult:
         """Return the final verdict with the surviving and pruned branches."""
 
 

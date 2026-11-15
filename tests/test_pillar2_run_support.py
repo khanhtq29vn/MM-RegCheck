@@ -62,7 +62,9 @@ def _pack() -> Any:
         ("  n_evals = 2 ", ("n_evals", 2)),
     ],
 )
-def test_parse_expansion_param_reads_int_float_and_bool(raw: str, expected: tuple[str, Any]) -> None:
+def test_parse_expansion_param_reads_int_float_and_bool(
+    raw: str, expected: tuple[str, Any]
+) -> None:
     assert parse_expansion_param(raw) == expected
 
 

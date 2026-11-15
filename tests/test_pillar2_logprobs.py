@@ -102,9 +102,7 @@ def test_token_mapping_matches_the_compliance_enum() -> None:
 
 def test_restricted_softmax_ignores_non_label_tokens_and_normalises() -> None:
     # Raw log-probabilities are not normalised over the labels (1 + 3 + 1 = 5).
-    client = _client(
-        _response({"0": 0.0, "1": math.log(3.0), "2": 0.0, "X": math.log(10.0)})
-    )
+    client = _client(_response({"0": 0.0, "1": math.log(3.0), "2": 0.0, "X": math.log(10.0)}))
     distribution = label_distribution(client, model="m", messages=PROMPT)
 
     assert distribution[ComplianceVerdict.NON_COMPLIANT] == pytest.approx(0.2)
@@ -114,9 +112,7 @@ def test_restricted_softmax_ignores_non_label_tokens_and_normalises() -> None:
 
 
 def test_tokens_with_a_leading_space_are_accepted() -> None:
-    client = _client(
-        _response({" 0": math.log(0.7), " 1": math.log(0.2), " 2": math.log(0.1)})
-    )
+    client = _client(_response({" 0": math.log(0.7), " 1": math.log(0.2), " 2": math.log(0.1)}))
     distribution = label_distribution(client, model="m", messages=PROMPT)
 
     assert distribution[ComplianceVerdict.NON_COMPLIANT] == pytest.approx(0.7)
@@ -229,9 +225,13 @@ def test_all_labels_present_emit_no_warning() -> None:
 def test_transient_error_is_retried_within_max_retry(monkeypatch: pytest.MonkeyPatch) -> None:
     sleeps: list[float] = []
     monkeypatch.setattr(logprobs.time, "sleep", sleeps.append)
-    completions = _FakeCompletions([_response({"0": 0.0, "1": 0.0, "2": 0.0})], errors_before_success=1)
+    completions = _FakeCompletions(
+        [_response({"0": 0.0, "1": 0.0, "2": 0.0})], errors_before_success=1
+    )
 
-    distribution = label_distribution(_FakeClient(completions), model="m", messages=PROMPT, max_retry=2)
+    distribution = label_distribution(
+        _FakeClient(completions), model="m", messages=PROMPT, max_retry=2
+    )
 
     assert sum(distribution.values()) == pytest.approx(1.0)
     assert len(completions.calls) == 2

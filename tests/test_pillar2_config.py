@@ -25,9 +25,7 @@ from mmregcheck.pillar2.scoring import CausalDeltaScoringStrategy
 
 
 class _Prior(BasePriorStrategy):
-    def compute_prior(
-        self, state: TFBearState, client: Any, model: str
-    ) -> dict[Any, float]:
+    def compute_prior(self, state: TFBearState, client: Any, model: str) -> dict[Any, float]:
         return {}
 
 
@@ -241,9 +239,7 @@ def test_sampling_values_are_validated(field: str, value: float) -> None:
         ("stage_top_logprobs", {"prior": 0}),
     ],
 )
-def test_stage_sampling_overrides_are_validated(
-    field: str, overrides: dict[str, float]
-) -> None:
+def test_stage_sampling_overrides_are_validated(field: str, overrides: dict[str, float]) -> None:
     with pytest.raises(ValueError, match=field):
         _config(**{field: overrides})
 

@@ -92,9 +92,7 @@ _EXPANSION_SETTING_NAMES = (
 
 
 #: Signature of `warnings.showwarning`; the run replaces it temporarily, never at import time.
-_ShowWarning = Callable[
-    [Warning | str, type[Warning], str, int, TextIO | None, str | None], None
-]
+_ShowWarning = Callable[[Warning | str, type[Warning], str, int, TextIO | None, str | None], None]
 
 
 def _show_tfbear_warnings_on_stderr(previous: _ShowWarning) -> _ShowWarning:
@@ -289,9 +287,7 @@ def describe_config(config: TFBearConfig) -> dict[str, Any]:
     """Return the effective settings of one resolved config, without any secret."""
     settings: dict[str, Any] = {
         "sampling": {name: getattr(config, name) for name in _SAMPLING_FIELDS},
-        "stage_sampling": {
-            name: dict(getattr(config, name)) for name in _STAGE_SAMPLING_FIELDS
-        },
+        "stage_sampling": {name: dict(getattr(config, name)) for name in _STAGE_SAMPLING_FIELDS},
         "expansion_strategy": {"strategy": type(config.expansion_strategy).__name__},
     }
     for name in _EXPANSION_SETTING_NAMES:
@@ -343,9 +339,7 @@ def run_benchmark(
     """
     with warnings.catch_warnings():
         warnings.simplefilter("always", TFBearWarning)
-        warnings.showwarning = cast(
-            Any, _show_tfbear_warnings_on_stderr(warnings.showwarning)
-        )
+        warnings.showwarning = cast(Any, _show_tfbear_warnings_on_stderr(warnings.showwarning))
         return _run_benchmark(
             samples,
             domain=domain,
@@ -402,9 +396,7 @@ def _run_benchmark(
     clients: dict[RegulatoryDomain, StageClients] = {}
 
     existing_predictions = (
-        _load_predictions(predictions_path)
-        if resume and predictions_path.is_file()
-        else []
+        _load_predictions(predictions_path) if resume and predictions_path.is_file() else []
     )
     resumed_sample_ids = {prediction.sample_id for prediction in existing_predictions}
     predictions: list[SubmissionPrediction] = list(existing_predictions)
@@ -551,9 +543,7 @@ def _load_predictions(path: Path) -> list[SubmissionPrediction]:
         try:
             predictions.append(SubmissionPrediction.model_validate_json(line))
         except ValueError as exc:
-            raise ValueError(
-                f"{path}:{line_no}: invalid prediction, cannot resume: {exc}"
-            ) from exc
+            raise ValueError(f"{path}:{line_no}: invalid prediction, cannot resume: {exc}") from exc
     return predictions
 
 

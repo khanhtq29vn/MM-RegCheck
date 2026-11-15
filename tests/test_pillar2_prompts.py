@@ -325,9 +325,7 @@ def test_expansion_params_reach_the_standard_strategy() -> None:
 
 def test_expansion_params_reach_the_tot_strategy() -> None:
     pack = load_prompt_pack(RegulatoryDomain.HEALTHCARE, "tot")
-    config = pack.to_config(
-        expansion_params={"breadth_limit": 2, "eval_temperature": 0.9, "k": 4}
-    )
+    config = pack.to_config(expansion_params={"breadth_limit": 2, "eval_temperature": 0.9, "k": 4})
 
     expansion = config.expansion_strategy
     assert isinstance(expansion, ToTExpansionStrategy)
