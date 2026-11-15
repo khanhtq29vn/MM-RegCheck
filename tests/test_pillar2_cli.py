@@ -19,13 +19,15 @@ from mmregcheck.pillar2.base import (
     BaseScoringStrategy,
 )
 from mmregcheck.pillar2.config import TFBearConfig
-from mmregcheck.pillar2.engine import StageClients, TFBearResult
+from mmregcheck.pillar2.engine import StageClients
 from mmregcheck.pillar2.pipeline_state import Node, TFBearState
+from mmregcheck.pillar2.tf_bear import TFBear
 from mmregcheck.schemas import (
     BusinessMetadata,
     ComplianceVerdict,
     MedRegSampleInput,
     RegulatoryDomain,
+    SubmissionPrediction,
     TFBearBranchTrace,
 )
 
@@ -217,19 +219,18 @@ def _install_pack_fakes(
     def fake_build_clients(_config: TFBearConfig) -> StageClients:
         return StageClients.single(_NullClient(), "test-model")
 
-    def fake_run(
-        state: TFBearState, config: TFBearConfig, *, clients: StageClients
-    ) -> TFBearResult:
-        return TFBearResult(
-            state=state,
-            verdict=NON,
+    def fake_predict(
+        bear: TFBear, sample: MedRegSampleInput, *, close_book: bool
+    ) -> SubmissionPrediction:
+        return SubmissionPrediction(
+            sample_id=sample.sample_id,
+            overall_verdict=NON,
             explanation="The strict branch drives the verdict.",
-            usage={},
         )
 
     monkeypatch.setattr(cli, "load_prompt_pack", fake_load_prompt_pack)
     monkeypatch.setattr(cli, "build_stage_clients", fake_build_clients)
-    monkeypatch.setattr(cli, "run_tfbear", fake_run)
+    monkeypatch.setattr(cli, "_predict_sample", fake_predict)
 
 
 def test_run_tfbear_uses_an_explicit_domain_and_expansion(

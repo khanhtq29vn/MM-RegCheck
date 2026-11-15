@@ -12,7 +12,7 @@ from rich.table import Table
 from mmregcheck import __version__
 from mmregcheck.evaluator import MedRegEvaluator
 from mmregcheck.pillar2.config import TFBearConfig
-from mmregcheck.pillar2.engine import StageClients, build_stage_clients, run_tfbear
+from mmregcheck.pillar2.engine import build_stage_clients
 from mmregcheck.pillar2.llm import EndpointConfig
 from mmregcheck.pillar2.prompts import (
     ExpansionName,
@@ -21,13 +21,8 @@ from mmregcheck.pillar2.prompts import (
     resolve_domain,
     resolve_expansion,
 )
-from mmregcheck.pillar2.sample_adapter import (
-    load_samples,
-    state_from_sample,
-    to_submission_prediction,
-    write_predictions,
-)
-from mmregcheck.pillar2.tf_bear import TFBearAdjudicator
+from mmregcheck.pillar2.sample_adapter import load_samples, write_predictions
+from mmregcheck.pillar2.tf_bear import TFBear, TFBearAdjudicator
 from mmregcheck.schemas import (
     ComplianceVerdict,
     MedRegSampleInput,
@@ -88,18 +83,13 @@ def _build_pack_config(
 
 
 def _predict_sample(
+    bear: TFBear,
     sample: MedRegSampleInput,
-    config: TFBearConfig,
-    clients: StageClients,
     *,
     close_book: bool,
 ) -> SubmissionPrediction:
     """Run one sample and convert the result into a leaderboard prediction."""
-    state = state_from_sample(sample)
-    if close_book:
-        state.retrieved_regulatory_context = ""
-    result = run_tfbear(state, config, clients=clients)
-    return to_submission_prediction(result, sample.sample_id)
+    return bear.run_sample(sample, open_book=not close_book)
 
 
 def _parse_domain_option(domain: str | None) -> RegulatoryDomain | None:
@@ -180,15 +170,15 @@ def run_tfbear_command(
             tau_posterior=tau_posterior,
             tau_delta=tau_delta,
         )
-        clients = build_stage_clients(config)
+        bear = TFBear(config, clients=build_stage_clients(config))
         for sample in samples:
-            predictions.append(_predict_sample(sample, config, clients, close_book=close_book))
+            predictions.append(_predict_sample(bear, sample, close_book=close_book))
     else:
         endpoint = EndpointConfig(base_url=base_url, api_key_env=api_key_env, model=model)
-        resolved_configs: dict[RegulatoryDomain, tuple[TFBearConfig, StageClients]] = {}
+        resolved_bears: dict[RegulatoryDomain, TFBear] = {}
         for sample in samples:
             sample_domain = resolved_domain or sample.domain
-            if sample_domain not in resolved_configs:
+            if sample_domain not in resolved_bears:
                 pack = load_prompt_pack(sample_domain, resolved_expansion or "standard")
                 config = _build_pack_config(
                     pack,
@@ -196,9 +186,10 @@ def run_tfbear_command(
                     tau_posterior=tau_posterior,
                     tau_delta=tau_delta,
                 )
-                resolved_configs[sample_domain] = (config, build_stage_clients(config))
-            config, clients = resolved_configs[sample_domain]
-            predictions.append(_predict_sample(sample, config, clients, close_book=close_book))
+                resolved_bears[sample_domain] = TFBear(config, clients=build_stage_clients(config))
+            predictions.append(
+                _predict_sample(resolved_bears[sample_domain], sample, close_book=close_book)
+            )
 
     out_path = Path(output)
     write_predictions(out_path, predictions)

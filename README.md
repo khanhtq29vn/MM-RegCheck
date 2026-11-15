@@ -82,6 +82,68 @@ uv run python scripts/run_tfbear_benchmark.py \
   --base-url https://your-endpoint.example/v1 --model your-model-id
 ```
 
+### Programmatic API
+
+`mmregcheck.pillar2.TFBear` is the entry point used by the CLI. Configure it once and reuse it
+for many claims or samples:
+
+```python
+from mmregcheck.pillar2 import EndpointConfig, TFBear, TFBearConfig
+
+endpoint = EndpointConfig(base_url="...", api_key_env="OPENAI_API_KEY", model="...")
+
+# Per-domain pack: the draft's prompts and expansion hyperparameters.
+bear = TFBear.from_domain("Beauty", "standard", endpoint=endpoint)
+result = bear.run(
+    text_claim="A spa advertises a TCA chemical peel.",
+    retrieved_regulatory_context="Basic Skincare Spa Scope: non-invasive cleansing only.",
+)
+print(result.verdict, result.explanation)
+
+# Or start from a hand-built configuration.
+bear = TFBear(TFBearConfig(endpoint=endpoint))
+result = bear.run("A facility advertises a treatment.")
+```
+
+`from_domain` accepts `Beauty` / `Healthcare` (case-insensitive) and `standard`, `cot-sc` or
+`tot`; extra keyword arguments such as `tau_posterior`, `tau_delta`, `max_retry` and `verbose`
+are forwarded to the prompt pack's `to_config`.
+
+For benchmark records, `run_sample` maps a `MedRegSampleInput` to a leaderboard
+`SubmissionPrediction`; `open_book=False` drops the retrieved regulatory context:
+
+```python
+prediction = bear.run_sample(sample)  # open-book, the default
+prediction = bear.run_sample(sample, open_book=False)  # close-book
+```
+
+Every stage can target a different endpoint. The stage names are `prior`, `expansion`, `scoring`,
+`adjudication` and `explanation`; stages without an override use `endpoint`:
+
+```python
+config = TFBearConfig(
+    endpoint=endpoint,
+    stage_endpoints={
+        "scoring": EndpointConfig(base_url=..., api_key_env=..., model=...),
+        "explanation": EndpointConfig(base_url=..., api_key_env=..., model=...),
+    },
+)
+bear = TFBear(config)
+```
+
+For the log-odds math alone, `TFBearAdjudicator` applies the dual-threshold gate and majority
+vote to already-scored branches, without any LLM call:
+
+```python
+from mmregcheck.pillar2 import TFBearAdjudicator
+
+result = TFBearAdjudicator(tau_posterior=0.50, tau_delta=0.50).adjudicate_branches(branches)
+result.final_verdict, result.surviving_branches, result.pruned_branches, result.used_fallback
+```
+
+`tf_bear.py` only wires the stages together: the implementations live in `prior.py`,
+`expansion/`, `scoring.py`, `adjudication.py` and `explainer.py`.
+
 ### Per-domain prompt packs (`--domain` / `--expansion`)
 
 The draft's six per-domain prompt files are ported to
@@ -108,14 +170,16 @@ The same options exist on `scripts/run_tfbear_benchmark.py`.
 Programmatic access uses the same packs:
 
 ```python
-from mmregcheck.pillar2.clients import EndpointConfig
+from mmregcheck.pillar2 import EndpointConfig, TFBear
 from mmregcheck.pillar2.prompts import load_prompt_pack
 from mmregcheck.schemas import RegulatoryDomain
 
+endpoint = EndpointConfig(base_url="...", api_key_env="OPENAI_API_KEY", model="...")
+bear = TFBear.from_domain(RegulatoryDomain.BEAUTY, "cot-sc", endpoint=endpoint)
+
+# Equivalent, if the pack itself is needed:
 pack = load_prompt_pack(RegulatoryDomain.BEAUTY, "cot-sc")
-config = pack.to_config(
-    endpoint=EndpointConfig(base_url="...", api_key_env="OPENAI_API_KEY", model="..."),
-)
+bear = TFBear(pack.to_config(endpoint=endpoint))
 ```
 
 `PromptPack` is frozen and validates every template at import time. `pack.expansion_kwargs()`
@@ -124,13 +188,12 @@ that build strategies themselves.
 
 ### Custom strategies
 
-Every stage is an injectable strategy. Subclass the matching `Base*Strategy` from
-`mmregcheck.pillar2.base`, implement its abstract method, and pass an instance to
+Every stage is an injectable strategy. Subclass the matching `Base*Strategy` (all five are
+exported by `mmregcheck.pillar2`), implement its abstract method, and pass an instance to
 `TFBearConfig`:
 
 ```python
-from mmregcheck.pillar2.base import BasePriorStrategy
-from mmregcheck.pillar2.config import TFBearConfig
+from mmregcheck.pillar2 import BasePriorStrategy, TFBear, TFBearConfig
 
 
 class RetrievalAwarePrior(BasePriorStrategy):
@@ -138,6 +201,7 @@ class RetrievalAwarePrior(BasePriorStrategy):
 
 
 config = TFBearConfig(prior_strategy=RetrievalAwarePrior(prompt_template="..."))
+bear = TFBear(config)
 ```
 
 The config validates that each custom object subclasses the base class of its stage and

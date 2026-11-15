@@ -15,8 +15,15 @@ All core data contracts are locked in `src/mmregcheck/schemas.py`. When pushing 
    - `retriever.py`: Implement `StatutoryHybridRetriever.retrieve(techniques, business_info)` for BM25 + Dense Top-$K$ statutory grounding $\hat{C}$.
 
 2. **`src/mmregcheck/pillar2/` (Pillar 2: Evidence Adjudicator via `TF-BEAR` — Section 4.2)**
-   - `tf_bear.py`: The mathematical log-odds filter $\Delta = L(P_{\text{posterior}}) - L(P_{\text{prior}})$ and dual-threshold gate ($P_{\text{posterior}} \ge \tau_p, \Delta \ge \tau_\Delta$) are already implemented and tested in `TFBearAdjudicator`. Plug in your VLM `logprobs` elicitation and trajectory expansion (`R1: Strict`, `R2: Permissive`, `R3: Partial`) there.
-   - `explainer.py`: `synthesize_overall_explanation(items)` aggregates technique-level verdicts into the overall `FIDES`-compliant rationale. The generative explanation strategies (`GenerativeExplanationStrategy` and `StructuredGenerativeExplanationStrategy`) plug into Stage 5 of the TF-BEAR engine (`config.py` / `engine.py`).
+   - `tf_bear.py`: The public entry point. `TFBear(config, clients=...)` runs one claim (`run`) or one benchmark sample (`run_sample`, with `open_book=False` for the close-book condition), and `TFBear.from_domain(domain, expansion, ...)` builds the pipeline from a per-domain prompt pack. This module is orchestration only and also re-exports the legacy `TFBearAdjudicator`, `TFBearAdjudicationResult`, `TFBearConfig`, `TFBearResult` and `run_tfbear` names.
+   - `adjudication.py`: `TFBearAdjudicator` implements and tests the mathematical log-odds filter $\Delta = L(P_{\text{posterior}}) - L(P_{\text{prior}})$, the dual-threshold gate ($P_{\text{posterior}} \ge \tau_p, \Delta \ge \tau_\Delta$), the majority vote, the summed-posterior tie-break and the Appendix H fallback. `summed_posterior_tally` is the one posterior aggregation shared by the adjudicator and the strategies.
+   - `prior.py`, `expansion/` (`standard`, `cot-sc`, `tot`), `scoring.py`: Stages 1–3. The VLM `logprobs` elicitation they share lives in `llm/logprobs.py`; trajectory expansion (`R1: Strict`, `R2: Permissive`, `R3: Partial`) is a strategy you can replace.
+   - `explainer.py`: Stage 5. `synthesize_overall_explanation(items)` aggregates technique-level verdicts into the overall `FIDES`-compliant rationale. The generative explanation strategies (`GenerativeExplanationStrategy` and `StructuredGenerativeExplanationStrategy`) plug into the engine here.
+   - `base.py`, `config.py`, `pipeline_state.py`, `results.py`, `engine.py`: The `Base*Strategy` contracts, the strategy/endpoint wiring (`TFBearConfig`, including per-stage `stage_endpoints`), the shared `TFBearState`/`Node`, the result and usage dataclasses, and the stage orchestration. Subclass a `Base*Strategy` and pass it to `TFBearConfig` to replace a stage.
+   - `llm/`: `clients.py` (endpoint configuration and client construction), `logprobs.py` (label-token distributions) and `completion.py` (bounded-retry completion helper, public as `create_completion`, plus `with_reasoning`). `openai` and `json_repair` are optional and imported lazily, so the core package works without the `llm` extra.
+   - `prompts/`: The per-domain prompt packs (`beauty.py`, `healthcare.py`).
+
+   The import graph is one-way: `results.py` and `base.py` sit at the bottom, then `adjudication.py`, `config.py`, `engine.py`, `prompts/`, with `tf_bear.py` and `pillar2/__init__.py` on top. Do not import a module from a layer above yours, and do not import underscore-prefixed names across modules.
 
 ---
 
