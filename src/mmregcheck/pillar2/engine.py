@@ -213,4 +213,5 @@ def run_tfbear(
         verdict=state.adjudication.final_verdict,
         explanation=explanation,
         usage=usage,
+        diagnostics=list(state.diagnostics),
     )

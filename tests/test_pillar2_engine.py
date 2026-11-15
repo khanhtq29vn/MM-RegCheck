@@ -188,6 +188,15 @@ def test_zero_scored_branches_is_reported() -> None:
         _run(_config(scoring=_EmptyScoring()))
 
 
+def test_diagnostics_are_copied_from_the_state_to_the_result() -> None:
+    state = TFBearState(text_claim="claim", diagnostics=["recorded before the run"])
+
+    result = _run(_config(), state)
+
+    assert result.diagnostics == ["recorded before the run"]
+    assert result.diagnostics is not state.diagnostics
+
+
 def test_token_usage_is_tracked_per_stage() -> None:
     class _UsageResponse:
         usage = SimpleNamespace(prompt_tokens=3, completion_tokens=1, total_tokens=4)
@@ -245,9 +254,13 @@ def test_build_stage_clients_honours_stage_overrides(
         model="scoring-model",
     )
     config = TFBearConfig(
+        prior_strategy=_FixedPrior(),
+        expansion_strategy=_FixedExpansion(),
+        scoring_strategy=_FixedScoring(),
+        adjudication_strategy=TFBearAdjudicationStrategy(),
+        explanation_strategy=_FixedExplanation(),
         endpoint=base,
         stage_endpoints={"scoring": scoring},
-        explanation_strategy=_FixedExplanation(),
     )
 
     clients = build_stage_clients(config)

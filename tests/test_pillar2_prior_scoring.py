@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Any
 
 import pytest
 
+from mmregcheck.pillar2.diagnostics import TFBearWarning
 from mmregcheck.pillar2.llm import TOKEN_TO_VERDICT
 from mmregcheck.pillar2.pipeline_state import Node, TFBearState
 from mmregcheck.pillar2.prior import LogprobPriorStrategy
@@ -155,14 +157,53 @@ def test_hollow_nodes_are_skipped_and_do_not_consume_calls() -> None:
         ],
     )
 
-    traces = CausalDeltaScoringStrategy(prompt_template="{text_claim}\n{state}").score(
-        state, _FakeClient(completions), MODEL
-    )
+    with pytest.warns(TFBearWarning, match=r"skipped 2 of 3"):
+        traces = CausalDeltaScoringStrategy(prompt_template="{text_claim}\n{state}").score(
+            state, _FakeClient(completions), MODEL
+        )
 
     assert len(traces) == 1
     assert traces[0].branch_id == "P3"
     assert traces[0].strategy == "R2: Permissive"
     assert len(completions.calls) == 1
+    assert len(state.diagnostics) == 1
+    assert "1 non-terminal" in state.diagnostics[0]
+    assert "1 with empty reasoning" in state.diagnostics[0]
+
+
+def test_scoring_does_not_warn_when_every_node_is_scoreable() -> None:
+    completions = _FakeCompletions([{"0": 0.9, "1": 0.05, "2": 0.05}])
+    state = TFBearState(
+        text_claim="claim",
+        p_prior=dict.fromkeys(ComplianceVerdict, 1 / 3),
+        nodes=[Node(state="path", is_terminal=True)],
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", TFBearWarning)
+        traces = CausalDeltaScoringStrategy(prompt_template="{text_claim}\n{state}").score(
+            state, _FakeClient(completions), MODEL
+        )
+
+    assert len(traces) == 1
+    assert state.diagnostics == []
+
+
+def test_all_equal_posterior_resolves_to_non_compliant() -> None:
+    completions = _FakeCompletions([{"0": 1 / 3, "1": 1 / 3, "2": 1 / 3}])
+    state = TFBearState(
+        text_claim="claim",
+        p_prior=dict.fromkeys(ComplianceVerdict, 1 / 3),
+        nodes=[Node(state="balanced path", is_terminal=True)],
+    )
+
+    trace = CausalDeltaScoringStrategy(prompt_template="{text_claim}\n{state}").score(
+        state, _FakeClient(completions), MODEL
+    )[0]
+
+    assert trace.predicted_verdict is ComplianceVerdict.NON_COMPLIANT
+    assert trace.posterior_prob == pytest.approx(1 / 3)
+    assert trace.log_odds_delta == pytest.approx(0.0)
 
 
 def test_scoring_without_scoreable_nodes_returns_an_empty_list() -> None:

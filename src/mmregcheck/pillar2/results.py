@@ -8,7 +8,7 @@ the orchestration module.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from mmregcheck.schemas import ComplianceVerdict, TFBearBranchTrace
@@ -39,9 +39,19 @@ class StageUsage:
 
 @dataclass(frozen=True, slots=True)
 class TFBearResult:
-    """Outcome of one TF-BEAR run."""
+    """Outcome of one TF-BEAR run.
+
+    Attributes:
+        state: Final state of the run.
+        verdict: Final adjudicated verdict.
+        explanation: Stage 5 output.
+        usage: Latency and token usage per stage.
+        diagnostics: Non-fatal conditions recorded during the run, in occurrence order. The list
+            does not depend on `verbose`, so a benchmark artefact can be audited after the run.
+    """
 
     state: TFBearState
     verdict: ComplianceVerdict
     explanation: str
     usage: dict[str, StageUsage]
+    diagnostics: list[str] = field(default_factory=list)
