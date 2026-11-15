@@ -1,4 +1,4 @@
-"""Shared state of the TF-BEAR pipeline (Section 4.2).
+"""Shared state of the TF-BEAR pipeline.
 
 A single `TFBearState` accumulates the inputs and outputs of every stage. Strategies receive
 the whole object and must only read the fields their stage contract allows:

@@ -1,17 +1,13 @@
-"""Healthcare-domain prompt pack, ported verbatim from `examples/healthcare/*.py`.
+"""Healthcare-domain prompt packs, one per expansion variant.
 
-Prior, scoring and explanation are identical in the standard, CoT-SC and ToT drafts, so they
-are defined once here; only the expansion prompts differ. The healthcare glossary is copied
-verbatim from the draft and injected into every expansion and scoring prompt exactly where the
-draft placed it.
+Prior, scoring and explanation prompts are identical across the standard, CoT-SC and ToT
+variants, so they are defined once here; only the expansion prompts differ. Every expansion and
+scoring prompt carries the glossary below, which maps trade names of procedures onto the
+regulated technique categories. Templates use the pipeline's placeholder names: `{text_claim}`
+for the advertised techniques, `{retrieved_regulatory_context}` for the allowed techniques and
+`{verdict}` for the adjudicated verdict. The ToT prompts additionally reference `{state}`.
 
-The only edits to the original text are the placeholder renames the repo contract requires:
-
-    {claim}    -> {text_claim}
-    {evidence} -> {retrieved_regulatory_context}
-    {label}    -> {verdict}
-
-The draft's `\"\"\"` block delimiters around `{text_claim}`/`{state}` are kept as literal text.
+The `\"\"\"` delimiters around `{state}` are prompt text the model sees, not Python syntax.
 """
 
 from __future__ import annotations
@@ -20,7 +16,7 @@ from mmregcheck.pillar2.prompts._pack import ExpansionName, PromptPack
 from mmregcheck.pillar2.prompts._tot_schemas import STATE_EVAL_SCHEMA, THOUGHT_GEN_SCHEMA
 from mmregcheck.schemas import RegulatoryDomain
 
-# Glossary (static reference table from glossary_trimmed.md), verbatim from the draft.
+# Glossary: static mapping of trade names onto regulated technique categories.
 _GLOSSARY = """\
 - Nâng mũi cấu trúc dựng trụ Nano Plus, nâng mũi dựng trụ cấu trúc, nâng mũi dựng trụ, nâng mũi Sline, softline → Nâng mũi cấu trúc
 - Nâng mũi Surgiform, nâng mũi Megaform → Nâng mũi bằng vật liệu độn nhân tạo

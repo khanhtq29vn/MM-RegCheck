@@ -1,10 +1,10 @@
 """Typed container for one per-domain prompt pack and its strategy wiring.
 
-A `PromptPack` holds the prompt templates the draft assembled in each
-`examples/{beauty,healthcare}/*.py` module (prior, expansion, scoring, explanation and, for
-tree-of-thoughts, the extra state-evaluation prompt) plus the hyperparameters the draft passed
-to the expansion strategy. Packs are immutable and validate every template at construction, so
-a placeholder the pipeline cannot fill fails at import instead of midway through a run.
+A `PromptPack` holds the prompt templates needed by one domain/expansion pair (prior, expansion,
+scoring, explanation and, for tree-of-thoughts, the extra state-evaluation prompt) plus the
+hyperparameters of its expansion strategy. Packs are immutable and validate every template at
+construction, so a placeholder the pipeline cannot fill fails at import instead of midway through
+a run.
 
 `PromptPack.to_config` follows `mmregcheck.pillar2.config`: it builds the matching built-in
 strategies and lets `TFBearConfig` own endpoint selection, thresholds and the propagation of
@@ -35,7 +35,7 @@ from mmregcheck.pillar2.prior import LogprobPriorStrategy
 from mmregcheck.pillar2.scoring import CausalDeltaScoringStrategy
 from mmregcheck.schemas import RegulatoryDomain
 
-#: Supported expansion variants, matching the draft's six example files.
+#: Supported expansion variants; every domain ships a pack for each of them.
 ExpansionName = Literal["standard", "cot-sc", "tot"]
 
 #: Ordered tuple of the supported expansion variants (for CLI validation and tests).
@@ -129,7 +129,7 @@ class PromptPack:
 
         Standard and CoT-SC share the `(n_paths, max_tokens, temperature)` shape; the ToT
         strategy additionally takes the evaluation template and the search parameters. The
-        draft used the same values for the three domains.
+        values belong to the pack, so each domain can tune its own expansion.
         """
         if self.expansion == "tot":
             return {
@@ -161,9 +161,9 @@ class PromptPack:
     ]:
         """Build fresh stage strategies wired to this pack's prompts.
 
-        The draft left the explanation strategy disabled; the pack builds it so a caller gets a
-        complete pipeline. Pass `explanation_max_tokens` to match a different budget (the draft
-        comment used 256).
+        The explanation strategy is built as well, so a pack always yields a config whose final
+        stage is wired like the others. Pass `explanation_max_tokens` to change the budget of
+        the explanation call.
         """
         prior = LogprobPriorStrategy(prompt_template=self.prior)
         expansion_type = {
@@ -191,7 +191,7 @@ class PromptPack:
         reasoning: dict[str, Any] | None = None,
         explanation_max_tokens: int = 256,
     ) -> TFBearConfig:
-        """Build a `TFBearConfig` that reproduces the draft's pipeline for this pack."""
+        """Build a `TFBearConfig` wired to this pack's prompts and hyperparameters."""
         prior, expansion, scoring, explanation = self.build_strategies(
             explanation_max_tokens=explanation_max_tokens
         )

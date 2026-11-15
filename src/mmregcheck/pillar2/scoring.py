@@ -1,9 +1,9 @@
-"""Stage 3: per-branch posterior scoring and causal log-odds attribution (Section 4.2).
+"""Stage 3: per-branch posterior scoring and causal log-odds attribution.
 
-Every scoreable node is classified once with the shared label-token logprob helper. The draft
-computed Delta inline with a second copy of the log-odds formula; here the trace's
-`TFBearBranchTrace.log_odds_delta` property owns the epsilon-stabilised transform, so scoring
-and adjudication can never disagree about Delta.
+Every scoreable node is classified once with the shared label-token logprob helper, so the
+posterior is elicited exactly like the prior and the two are directly comparable. The trace's
+`TFBearBranchTrace.log_odds_delta` property owns the epsilon-stabilised log-odds transform, so
+scoring and adjudication can never disagree about Delta.
 """
 
 from __future__ import annotations
@@ -28,14 +28,14 @@ class CausalDeltaScoringStrategy(BaseScoringStrategy):
     * `rationale` is the node's reasoning text,
     * Delta is read from `TFBearBranchTrace.log_odds_delta`.
 
-    Hollow paths follow the draft: a node that is not terminal, or whose state and answer are
-    both blank, is skipped and produces no trace. The result can therefore be shorter than
-    `state.nodes`, and empty when nothing is scoreable. The strategy never writes
-    `state.p_posterior`; per-branch distributions live on the traces, and inventing an
-    aggregate would misreport any single branch.
+    Hollow paths are skipped: a node that is not terminal, or whose state and answer are both
+    blank, produces no trace. The result can therefore be shorter than `state.nodes`, and empty
+    when nothing is scoreable. The strategy never writes `state.p_posterior`; per-branch
+    distributions live on the traces, and inventing an aggregate would misreport any single
+    branch.
 
-    The prior must already cover the predicted verdict; a missing entry is an error rather
-    than the draft's silent 1/3 default, which would fabricate a Delta.
+    The prior must already cover the predicted verdict; a missing entry is an error rather than
+    a uniform fallback, because a default probability would fabricate a Delta.
     """
 
     def score(
@@ -67,7 +67,7 @@ class CausalDeltaScoringStrategy(BaseScoringStrategy):
                 max_retry=self.max_retry,
             )
             # Distribution order follows the digit order, so an exact tie resolves to "0"
-            # (Non-Compliant) as in the draft's `max` over the same insertion order.
+            # (Non-Compliant): `max` keeps the first of equally high entries.
             predicted_verdict = max(distribution, key=lambda verdict: distribution[verdict])
 
             if predicted_verdict not in state.p_prior:

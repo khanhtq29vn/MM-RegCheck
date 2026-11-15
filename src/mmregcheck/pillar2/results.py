@@ -1,4 +1,4 @@
-"""Result types of the TF-BEAR pipeline (Section 4.2).
+"""Result types of the TF-BEAR pipeline.
 
 These dataclasses are the return values of the pipeline and of its adjudication stage. They sit
 at the bottom of the import graph together with `base.py`: `pipeline_state` and `base` import

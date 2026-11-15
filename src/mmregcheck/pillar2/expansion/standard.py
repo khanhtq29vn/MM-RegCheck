@@ -16,9 +16,9 @@ STANDARD_STRATEGY = "standard"
 class StandardExpansionStrategy(BaseExpansionStrategy):
     """Zero-shot baseline: one direct reasoning path per sampled completion.
 
-    Parameters mirror the TF-BEAR draft. `temperature` defaults to 0.0 (greedy), so a request with
-    `n_paths > 1` only produces diverse paths when the caller raises it. The paper's Appendix
-    reports `T = 0.2` for reasoning expansion; pass `temperature=0.2` to reproduce that setting.
+    `temperature` defaults to 0.0 (greedy), so a request with `n_paths > 1` only produces
+    diverse paths when the caller raises it; pass `temperature=0.2` to sample several
+    independent paths from the same prompt.
 
     Args:
         n_paths: Number of independent completions requested from the API.

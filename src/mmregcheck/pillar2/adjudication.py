@@ -1,13 +1,12 @@
-"""Adjudication of the TF-BEAR pipeline (Section 4.2, Stage 4).
+"""Adjudication of the TF-BEAR pipeline (Stage 4).
 
 `TFBearAdjudicator` is the authoritative math: the dual-threshold gate, the majority vote, the
-summed-posterior tie-break and the Appendix H fallback. `summed_posterior_tally` is the one
+summed-posterior tie-break and the summed-posterior fallback. `summed_posterior_tally` is the one
 posterior aggregation every strategy shares.
 
 The strategies wire that math into the pipeline. `TFBearAdjudicationStrategy` is the default and
-calls the adjudicator directly; the two extra strategies port the draft's `selection.py`
-behaviour onto `TFBearBranchTrace` and are opt-in because they report more than the paper's
-adjudicator:
+calls the adjudicator directly; the two extra strategies operate on `TFBearBranchTrace` and are
+opt-in because they report more than the default adjudicator:
 
     MajorityVoteAdjudicationStrategy  same gate/vote/fallback, plus the normalised summed
                                       posterior in `state.p_posterior`
@@ -80,7 +79,7 @@ class TFBearAdjudicator:
             winner = max(vote_counts, key=lambda v: (vote_counts[v], posterior_tally[v]))
         else:
             # No branch passed the causal filter: pick the label with the highest
-            # summed posterior across all generated branches (Appendix H fallback).
+            # summed posterior across all generated branches.
             winner = max(ComplianceVerdict, key=lambda v: posterior_tally[v])
 
         return TFBearAdjudicationResult(
@@ -99,7 +98,7 @@ def _validate_thresholds(tau_posterior: float, tau_delta: float) -> None:
 
 
 class TFBearAdjudicationStrategy(BaseAdjudicationStrategy):
-    """Default adjudication: the paper's dual-threshold gate and vote.
+    """Default adjudication: dual-threshold gate and majority vote.
 
     This is a thin wrapper around `TFBearAdjudicator` so the thresholds live in
     `TFBearConfig`; it uses `state.branches` produced by the scoring stage.
@@ -134,12 +133,12 @@ class TFBearAdjudicationStrategy(BaseAdjudicationStrategy):
 
 
 class MajorityVoteAdjudicationStrategy(BaseAdjudicationStrategy):
-    """Draft majority vote: `TFBearAdjudicator` plus the reported aggregate posterior.
+    """Majority vote plus the aggregate posterior: `TFBearAdjudicator` with `state.p_posterior`.
 
     The gate, vote, tie-break and fallback are exactly `TFBearAdjudicator`'s, so this strategy
     delegates to it instead of duplicating the math. Its only extra work is writing the
-    normalised `summed_posterior_tally` to `state.p_posterior`, which the draft's evaluation
-    scripts read. Use it when reproducing those numbers.
+    normalised `summed_posterior_tally` to `state.p_posterior`, for callers that need the
+    aggregate distribution next to the verdict. Use it when that aggregate is required.
     """
 
     def __init__(
@@ -180,12 +179,12 @@ class MajorityVoteAdjudicationStrategy(BaseAdjudicationStrategy):
 
 
 class JointAdjudicationStrategy(BaseAdjudicationStrategy):
-    """Draft joint selection: classify every qualifying path in one logprob call.
+    """Joint selection: classify every qualifying path in one logprob call.
 
     Qualifying paths (posterior at the branch's own verdict at least `tau_posterior`) are
     serialised into `{paths}` and classified together. If none qualifies, the single
     highest-posterior path is used and the result is marked as a fallback. The joint
-    distribution is written to `state.p_posterior`, as in the draft.
+    distribution is written to `state.p_posterior` so callers can report it.
     """
 
     def __init__(

@@ -16,8 +16,8 @@ COT_SC_STRATEGY = "cot-sc"
 class CoTSCExpansionStrategy(BaseExpansionStrategy):
     """Generate `n_paths` independent chain-of-thought paths via API self-consistency sampling.
 
-    Parameters mirror the TF-BEAR draft. `temperature` defaults to 0.7; the paper's Appendix
-    reports `T = 0.2` for reasoning expansion, which a caller can request explicitly.
+    `temperature` defaults to 0.7 so the sampled paths actually differ from one another; pass a
+    lower value (for example 0.2) when the reasoning should stay close to greedy.
 
     Args:
         n_paths: Number of independent completions requested from the API.

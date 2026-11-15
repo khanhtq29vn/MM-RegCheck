@@ -1,4 +1,4 @@
-"""Abstract strategies of the TF-BEAR pipeline (Section 4.2).
+"""Abstract strategies of the TF-BEAR pipeline.
 
 Every stage of the pipeline is an injectable strategy. To customise a stage, subclass the
 matching `Base*Strategy` and pass an instance to the pipeline configuration; the subclass then
@@ -70,8 +70,9 @@ class BaseScoringStrategy(_BaseStrategy, ABC):
     def score(self, state: TFBearState, client: Any, model: str) -> list[TFBearBranchTrace]:
         """Return one trace per node of `state.nodes`.
 
-        Delta must come from `TFBearBranchTrace.log_odds_delta` so that every strategy uses the
-        same epsilon-stabilised transform as the paper.
+        Delta must come from `TFBearBranchTrace.log_odds_delta`, the single epsilon-stabilised
+        transform of the posterior and prior probabilities, so that every strategy reports a
+        comparable Delta and scoring cannot disagree with adjudication.
         """
 
 

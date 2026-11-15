@@ -1,18 +1,20 @@
-"""Configuration of the TF-BEAR pipeline (Section 4.2).
+"""Configuration of the TF-BEAR pipeline.
 
-`TFBearConfig` is the port of the draft's `PipelineConfig`: one injectable strategy per stage
-plus the endpoint, thresholds and global retry/verbosity settings. Unlike the draft it is also
-the single place that knows how to reach the LLM endpoint(s).
+`TFBearConfig` wires one injectable strategy per stage and holds the endpoint, thresholds and
+global retry/verbosity settings. It is also the single place that knows how to reach the LLM
+endpoint(s).
 
-Every stage defaults to the built-in strategy, so a caller that only wants the paper pipeline
+Every stage defaults to the built-in strategy, so a caller that only wants the stock pipeline
 can write `TFBearConfig(endpoint=EndpointConfig(...))`. Custom strategies must subclass the
 matching `Base*Strategy`; a wrong object is rejected at construction instead of failing halfway
 through a run. The explanation strategy is imported lazily because it pulls the optional LLM
 path and is developed independently of the other stages.
 
-Prompts are caller data. The defaults below are domain-neutral English prompts with the
-paper's strict hierarchy and the `0/1/2` answer convention; the draft's per-domain packs
-(`examples/beauty/*.py`, `examples/healthcare/*.py`) remain the reference for benchmark runs.
+Prompts are caller data. The defaults below are domain-neutral English prompts built on the
+strict hierarchy (one Non-Compliant technique makes the advertisement Non-Compliant, otherwise
+one Partly-Compliant technique makes it Partly-Compliant, otherwise it is Compliant) and the
+`0/1/2` answer convention (0 = Non-Compliant, 1 = Partly-Compliant, 2 = Compliant). The
+per-domain packs in `mmregcheck.pillar2.prompts` are the reference for benchmark runs.
 """
 
 from __future__ import annotations

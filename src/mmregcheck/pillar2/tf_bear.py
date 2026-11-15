@@ -1,4 +1,4 @@
-"""Public entry point of the TF-BEAR pipeline (Section 4.2).
+"""Public entry point of the TF-BEAR pipeline.
 
 The pipeline runs five stages over one claim and its retrieved regulatory context:
 
@@ -102,7 +102,8 @@ class TFBear:
         """Run one benchmark sample and return a leaderboard prediction.
 
         With `open_book=False` the sample's retrieved regulatory context is dropped before the
-        run, reproducing the paper's close-book condition.
+        run, which gives the close-book (evidence-free) condition: the pipeline must decide from
+        the claim alone.
         """
         state = state_from_sample(sample)
         if not open_book:

@@ -1,15 +1,15 @@
 """Stage 5 explanation strategies: free-text and structured verdict rationales.
 
-Port of the TF-BEAR draft `strategies/explanation.py` to the repo strategy contract. Both
-strategies render `prompt_template` through `TFBearState.render`, so a template may reference
-`{text_claim}`, `{retrieved_regulatory_context}`, `{verdict}` and `{paths}`. The `{paths}` block
-is built from the branches the adjudication stage kept, which is the repo equivalent of the
-draft's `state.relevant_nodes`:
+Both strategies render `prompt_template` through `TFBearState.render`, so a template may
+reference `{text_claim}`, `{retrieved_regulatory_context}`, `{verdict}` and `{paths}`. The
+`{paths}` block is built from the branches the adjudication stage kept, i.e. the reasoning the
+verdict actually rests on:
 
-    GenerativeExplanationStrategy           one free-text completion
+    GenerativeExplanationStrategy            one free-text completion
     StructuredGenerativeExplanationStrategy  JSON-constrained completion validated by Pydantic
 
-The deterministic `synthesize_overall_explanation` function below is unchanged.
+`synthesize_overall_explanation` aggregates technique-level verdicts with the strict hierarchy
+for callers that do not run the LLM stages.
 
 `client` is any OpenAI-compatible chat-completion client, i.e. an object exposing
 `client.chat.completions.create(model=..., messages=[...], **kwargs)` whose response has
@@ -29,7 +29,7 @@ from mmregcheck.pillar2.llm import create_completion, with_reasoning
 from mmregcheck.pillar2.pipeline_state import TFBearState
 from mmregcheck.schemas import TechniqueVerdictItem, TFBearBranchTrace, aggregate_strict_hierarchy
 
-#: Default free-text prompt; adapted from the draft's explanation prompt to the repo field names.
+#: Default free-text prompt, written against the pipeline's placeholder names.
 DEFAULT_EXPLANATION_PROMPT = """\
 You are a regulatory compliance auditor.
 
@@ -77,9 +77,10 @@ class ExplanationOutput(BaseModel):
 def _supporting_paths(state: TFBearState) -> str:
     """Serialise the adjudicated branches as the `{paths}` template block.
 
-    The draft passed the nodes selected by its selection stage; the repo counterpart is the set of
-    surviving branches of the adjudication. Before adjudication has run (or when no branch passed
-    the gate) every scored branch is listed instead, so the prompt is never silently empty.
+    The explanation should cite the reasoning the verdict rests on, which is the set of
+    surviving branches of the adjudication. Before adjudication has run (or when no branch
+    passed the gate) every scored branch is listed instead, so the prompt is never silently
+    empty.
     """
     adjudication = state.adjudication
     branches: list[TFBearBranchTrace]
@@ -190,7 +191,7 @@ class StructuredGenerativeExplanationStrategy(BaseExplanationStrategy):
     """Explain the verdict with a JSON-constrained completion validated by Pydantic.
 
     The validated object is re-serialised to a JSON string, so callers can `json.loads()` the
-    returned explanation to recover the structured fields (draft behaviour).
+    returned explanation to recover the structured fields.
 
     Args:
         output_schema: Pydantic model whose JSON schema is sent as the `response_format`.

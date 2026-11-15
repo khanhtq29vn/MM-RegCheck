@@ -1,7 +1,7 @@
 """Per-domain prompt packs of the TF-BEAR pipeline.
 
-The draft kept six standalone example modules, one per domain and expansion variant. Here the
-prompt text lives in `beauty.py` and `healthcare.py`, and this module exposes a typed lookup:
+The prompt text lives in one module per domain (`beauty.py` and `healthcare.py`), each defining a
+pack per expansion variant. This module exposes a typed lookup:
 
     pack = load_prompt_pack(RegulatoryDomain.BEAUTY, "cot-sc")
     config = pack.to_config(endpoint=EndpointConfig(...))

@@ -1,14 +1,12 @@
-"""Beauty-domain prompt pack, ported verbatim from `examples/beauty/*.py`.
+"""Beauty-domain prompt packs, one per expansion variant.
 
-Prior, scoring and explanation are identical in the standard, CoT-SC and ToT drafts, so they
-are defined once here; only the expansion prompts differ. The only edits to the original text
-are the placeholder renames the repo contract requires:
+Prior, scoring and explanation prompts are identical across the standard, CoT-SC and ToT
+variants, so they are defined once here; only the expansion prompts differ. Templates use the
+pipeline's placeholder names: `{text_claim}` for the advertised techniques,
+`{retrieved_regulatory_context}` for the registered business types and `{verdict}` for the
+adjudicated verdict. The ToT prompts additionally reference `{state}`.
 
-    {claim}    -> {text_claim}
-    {evidence} -> {retrieved_regulatory_context}
-    {label}    -> {verdict}
-
-The draft's `\"\"\"` block delimiters around `{text_claim}`/`{state}` are kept as literal text.
+The `\"\"\"` delimiters around `{state}` are prompt text the model sees, not Python syntax.
 """
 
 from __future__ import annotations

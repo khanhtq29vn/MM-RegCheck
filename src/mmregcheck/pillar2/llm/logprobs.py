@@ -1,12 +1,11 @@
 """Elicitation of the three-way compliance distribution from label-token logprobs.
 
-Appendix H constrains the model answer to a single digit `y_t in {0, 1, 2}`. One chat call
-with `max_tokens=1` and logprobs therefore yields a distribution over the three
-`ComplianceVerdict` members directly, without parsing free text.
+The model answer is constrained to a single digit `y_t in {0, 1, 2}`. One chat call with
+`max_tokens=1` and logprobs therefore yields a distribution over the three `ComplianceVerdict`
+members directly, without parsing free text.
 
-The draft duplicates this logic in `strategies/prior.py`, `strategies/scoring.py` and
-`strategies/utils.py`; this module is the single implementation both stages use, so the prior
-and the posterior are elicited identically.
+This module is the single implementation the prior and scoring stages share, so the prior and
+the posterior are elicited with exactly the same procedure and remain comparable.
 """
 
 from __future__ import annotations
@@ -19,10 +18,9 @@ from typing import Any
 from mmregcheck.pillar2.llm.clients import ChatClient, ChoiceLogprobs
 from mmregcheck.schemas import ComplianceVerdict
 
-# Draft benchmark mapping (e.g. `examples/beauty/beauty_tot.py`): the digit the model emits
-# maps onto the schema's verdict values in this order. The library defaults of the draft
-# ("Refuted"/"Not Enough Info"/"Supported") do not name `ComplianceVerdict` members and are
-# deliberately not carried over.
+# Benchmark label mapping: the digit the model emits maps onto the schema's verdict values in
+# this order. Generic label sets such as "Refuted"/"Not Enough Info"/"Supported" do not name
+# `ComplianceVerdict` members and are deliberately not used.
 TOKEN_TO_VERDICT: dict[str, ComplianceVerdict] = {
     "0": ComplianceVerdict.NON_COMPLIANT,
     "1": ComplianceVerdict.PARTLY_COMPLIANT,
@@ -41,9 +39,8 @@ class MissingLogprobsError(LogprobElicitationError):
 class LabelTokenMissingError(LogprobElicitationError):
     """Raised when none of the label tokens appears in the returned top logprobs.
 
-    The draft would keep whatever token survived (and renormalise a single remaining label to
-    1.0). When no label is present there is nothing to renormalise, so a distribution would
-    have to be invented; this error prevents a fabricated Delta downstream.
+    When no label is present there is nothing to renormalise, so a distribution would have to be
+    invented; this error prevents a fabricated Delta downstream.
     """
 
 
@@ -68,9 +65,9 @@ def _restricted_softmax(
 ) -> dict[ComplianceVerdict, float]:
     """Softmax over the label tokens that the endpoint returned.
 
-    Draft semantics are kept on purpose: a label outside the top-K candidates gets
-    probability 0.0 and the present labels are renormalised, so the result is always a proper
-    softmax over what the model actually emitted. Tokens may carry a leading space.
+    A label outside the top-K candidates gets probability 0.0 and the present labels are
+    renormalised, so the result is always a proper softmax over what the model actually emitted.
+    Tokens may carry a leading space.
     """
     log_probs: dict[ComplianceVerdict, float | None] = {}
     for token, verdict in label_tokens.items():
@@ -109,8 +106,8 @@ def label_distribution(
     """Ask for one label token and return its restricted-softmax distribution.
 
     A single chat-completion call with `max_tokens=1` and logprobs is made per attempt.
-    Transport and endpoint failures are retried with the draft's exponential backoff, bounded
-    by `max_retry`. Deterministic failures (no logprobs, no label token in the candidates) are
+    Transport and endpoint failures are retried with exponential backoff, bounded by
+    `max_retry`. Deterministic failures (no logprobs, no label token in the candidates) are
     raised immediately: the request is greedy, so repeating it cannot change the answer and
     would only spend calls.
 
@@ -120,7 +117,8 @@ def label_distribution(
         messages: Chat messages of the prompt; the model must answer with one digit.
         max_retry: Maximum number of attempts; must be at least 1.
         top_logprobs: Number of candidate tokens requested per position.
-        label_tokens: Token -> verdict mapping; defaults to the paper's digits.
+        label_tokens: Token -> verdict mapping; defaults to the `0`/`1`/`2` digits of
+            `TOKEN_TO_VERDICT`.
 
     Returns:
         A mapping over all `ComplianceVerdict` members. Labels absent from the returned

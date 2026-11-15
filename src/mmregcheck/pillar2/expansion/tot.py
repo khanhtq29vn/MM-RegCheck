@@ -1,9 +1,9 @@
-"""Tree-of-Thoughts reasoning-path expansion (Section 4.2).
+"""Tree-of-Thoughts reasoning-path expansion.
 
-Port of the TF-BEAR draft `strategies/utils.py` engine, reduced to what the paper actually runs:
-breadth-first *exhaustive* search (`bfs_exhaustive`) with LLM-driven early termination and
-heuristic pruning. The draft's DFS, greedy BFS, HTML visualisation, task-specific leftovers and
-all bare `print()` calls are intentionally not ported.
+Breadth-first *exhaustive* search (`bfs_exhaustive`) with LLM-driven early termination and
+heuristic pruning: every terminal branch is collected instead of stopping at the first one,
+because the expansion stage must hand all surviving paths to scoring. Depth-first search, greedy
+BFS and renderings of the tree are deliberately out of scope; this engine only produces paths.
 
 The engine is task-agnostic: the two prompt callables, the heuristic calculator and the response
 formats are injected by `ToTExpansionStrategy`. All diagnostics go through `TFBearLogger`, which
@@ -29,7 +29,7 @@ from mmregcheck.pillar2.pipeline_state import Node, TFBearState, validate_templa
 #: Value of `Node.meta["strategy"]`; the scoring stage copies it into `TFBearBranchTrace.strategy`.
 TOT_STRATEGY = "tot"
 
-# Draft label -> numeric value used by the value-style state evaluator.
+# Evaluator label -> numeric value used by the value-style state evaluator.
 _EVALUATION_TO_SCORE: dict[str, float] = {"sure": 1.0, "likely": 0.5, "impossible": 0.0}
 
 # Default JSON-mode response_format; callers can override it per instance.
