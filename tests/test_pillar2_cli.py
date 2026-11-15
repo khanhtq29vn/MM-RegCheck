@@ -19,7 +19,7 @@ from mmregcheck.pillar2.base import (
     BaseScoringStrategy,
 )
 from mmregcheck.pillar2.config import TFBearConfig
-from mmregcheck.pillar2.engine import StageClients
+from mmregcheck.pillar2.engine import StageClients, TFBearResult
 from mmregcheck.pillar2.pipeline_state import Node, TFBearState
 from mmregcheck.schemas import (
     BusinessMetadata,
@@ -187,3 +187,138 @@ def test_run_tfbear_requires_an_endpoint_and_model(tmp_path: Path) -> None:
     result = runner.invoke(cli.app, ["run-tfbear", str(samples)])
 
     assert result.exit_code != 0
+
+
+def _write_samples_for(path: Path, domains: list[RegulatoryDomain]) -> None:
+    lines = []
+    for index, domain in enumerate(domains, start=1):
+        sample = MedRegSampleInput(
+            sample_id=f"MEDREG-TEST-{index:04d}",
+            domain=domain,
+            text_claim="A facility advertises a treatment.",
+            image_rel_path="images/ignored.jpg",
+            business_info=BusinessMetadata(facility_name="Test Facility"),
+            retrieved_regulatory_context=["Rule one."],
+        )
+        lines.append(sample.model_dump_json())
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _install_pack_fakes(
+    monkeypatch: pytest.MonkeyPatch,
+    loaded: list[tuple[RegulatoryDomain, str]],
+) -> None:
+    real_load_prompt_pack = cli.load_prompt_pack
+
+    def fake_load_prompt_pack(domain: RegulatoryDomain, expansion: str) -> Any:
+        loaded.append((domain, expansion))
+        return real_load_prompt_pack(domain, expansion)  # type: ignore[arg-type]
+
+    def fake_build_clients(_config: TFBearConfig) -> StageClients:
+        return StageClients.single(_NullClient(), "test-model")
+
+    def fake_run(
+        state: TFBearState, config: TFBearConfig, *, clients: StageClients
+    ) -> TFBearResult:
+        return TFBearResult(
+            state=state,
+            verdict=NON,
+            explanation="The strict branch drives the verdict.",
+            usage={},
+        )
+
+    monkeypatch.setattr(cli, "load_prompt_pack", fake_load_prompt_pack)
+    monkeypatch.setattr(cli, "build_stage_clients", fake_build_clients)
+    monkeypatch.setattr(cli, "run_tfbear", fake_run)
+
+
+def test_run_tfbear_uses_an_explicit_domain_and_expansion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    samples = tmp_path / "samples.jsonl"
+    output = tmp_path / "predictions.jsonl"
+    _write_samples(samples, count=1)
+    loaded: list[tuple[RegulatoryDomain, str]] = []
+    _install_pack_fakes(monkeypatch, loaded)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "run-tfbear",
+            str(samples),
+            "--base-url",
+            "https://endpoint.invalid/v1",
+            "--model",
+            "test-model",
+            "--out",
+            str(output),
+            "--domain",
+            "Healthcare",
+            "--expansion",
+            "tot",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert loaded == [(RegulatoryDomain.HEALTHCARE, "tot")]
+    predictions = MedRegEvaluator.validate_submission_file(output)
+    assert len(predictions) == 1
+
+
+def test_run_tfbear_prefers_each_sample_domain_when_domain_is_omitted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    samples = tmp_path / "samples.jsonl"
+    output = tmp_path / "predictions.jsonl"
+    _write_samples_for(samples, [RegulatoryDomain.BEAUTY, RegulatoryDomain.HEALTHCARE])
+    loaded: list[tuple[RegulatoryDomain, str]] = []
+    _install_pack_fakes(monkeypatch, loaded)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "run-tfbear",
+            str(samples),
+            "--base-url",
+            "https://endpoint.invalid/v1",
+            "--model",
+            "test-model",
+            "--out",
+            str(output),
+            "--expansion",
+            "cot-sc",
+        ],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    assert loaded == [
+        (RegulatoryDomain.BEAUTY, "cot-sc"),
+        (RegulatoryDomain.HEALTHCARE, "cot-sc"),
+    ]
+
+
+def test_run_tfbear_rejects_an_unknown_expansion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    samples = tmp_path / "samples.jsonl"
+    _write_samples(samples, count=1)
+    loaded: list[tuple[RegulatoryDomain, str]] = []
+    _install_pack_fakes(monkeypatch, loaded)
+
+    result = runner.invoke(
+        cli.app,
+        [
+            "run-tfbear",
+            str(samples),
+            "--base-url",
+            "https://endpoint.invalid/v1",
+            "--model",
+            "test-model",
+            "--expansion",
+            "cot",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Unknown expansion" in result.output
+    assert loaded == []

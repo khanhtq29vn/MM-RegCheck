@@ -13,7 +13,14 @@ from mmregcheck import __version__
 from mmregcheck.evaluator import MedRegEvaluator
 from mmregcheck.pillar2.clients import EndpointConfig
 from mmregcheck.pillar2.config import TFBearConfig
-from mmregcheck.pillar2.engine import build_stage_clients, run_tfbear
+from mmregcheck.pillar2.engine import StageClients, build_stage_clients, run_tfbear
+from mmregcheck.pillar2.prompts import (
+    ExpansionName,
+    PromptPack,
+    load_prompt_pack,
+    resolve_domain,
+    resolve_expansion,
+)
 from mmregcheck.pillar2.sample_adapter import (
     load_samples,
     state_from_sample,
@@ -21,7 +28,13 @@ from mmregcheck.pillar2.sample_adapter import (
     write_predictions,
 )
 from mmregcheck.pillar2.tf_bear import TFBearAdjudicator
-from mmregcheck.schemas import ComplianceVerdict, TFBearBranchTrace
+from mmregcheck.schemas import (
+    ComplianceVerdict,
+    MedRegSampleInput,
+    RegulatoryDomain,
+    SubmissionPrediction,
+    TFBearBranchTrace,
+)
 
 app = typer.Typer(
     name="mmregcheck",
@@ -59,6 +72,54 @@ def _build_config(
     )
 
 
+def _build_pack_config(
+    pack: PromptPack,
+    *,
+    endpoint: EndpointConfig,
+    tau_posterior: float,
+    tau_delta: float,
+) -> TFBearConfig:
+    """Build the configuration of one per-domain prompt pack."""
+    return pack.to_config(
+        endpoint=endpoint,
+        tau_posterior=tau_posterior,
+        tau_delta=tau_delta,
+    )
+
+
+def _predict_sample(
+    sample: MedRegSampleInput,
+    config: TFBearConfig,
+    clients: StageClients,
+    *,
+    close_book: bool,
+) -> SubmissionPrediction:
+    """Run one sample and convert the result into a leaderboard prediction."""
+    state = state_from_sample(sample)
+    if close_book:
+        state.retrieved_regulatory_context = ""
+    result = run_tfbear(state, config, clients=clients)
+    return to_submission_prediction(result, sample.sample_id)
+
+
+def _parse_domain_option(domain: str | None) -> RegulatoryDomain | None:
+    if domain is None:
+        return None
+    try:
+        return resolve_domain(domain)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--domain") from exc
+
+
+def _parse_expansion_option(expansion: str | None) -> ExpansionName | None:
+    if expansion is None:
+        return None
+    try:
+        return resolve_expansion(expansion)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--expansion") from exc
+
+
 @app.command("run-tfbear")
 def run_tfbear_command(
     samples_path: Annotated[Path, typer.Argument(help="Input MedReg-MM samples .jsonl file.")],
@@ -89,25 +150,55 @@ def run_tfbear_command(
     tau_delta: Annotated[
         float, typer.Option("--tau-delta", help="Log-odds Delta threshold of the dual gate.")
     ] = 0.50,
+    domain: Annotated[
+        str | None,
+        typer.Option(
+            "--domain",
+            help="Prompt-pack domain (Beauty/Healthcare); defaults to each sample's domain.",
+        ),
+    ] = None,
+    expansion: Annotated[
+        str | None,
+        typer.Option(
+            "--expansion",
+            help="Prompt-pack expansion: standard, cot-sc or tot. Defaults to standard.",
+        ),
+    ] = None,
 ) -> None:
     """Run TF-BEAR over a samples file and write leaderboard-compatible predictions."""
+    resolved_domain = _parse_domain_option(domain)
+    resolved_expansion = _parse_expansion_option(expansion)
     samples = load_samples(samples_path)
-    config = _build_config(
-        base_url=base_url,
-        model=model,
-        api_key_env=api_key_env,
-        tau_posterior=tau_posterior,
-        tau_delta=tau_delta,
-    )
-    clients = build_stage_clients(config)
+    predictions: list[SubmissionPrediction] = []
 
-    predictions = []
-    for sample in samples:
-        state = state_from_sample(sample)
-        if close_book:
-            state.retrieved_regulatory_context = ""
-        result = run_tfbear(state, config, clients=clients)
-        predictions.append(to_submission_prediction(result, sample.sample_id))
+    if resolved_domain is None and resolved_expansion is None:
+        # Neither option given: keep the original domain-neutral pipeline.
+        config = _build_config(
+            base_url=base_url,
+            model=model,
+            api_key_env=api_key_env,
+            tau_posterior=tau_posterior,
+            tau_delta=tau_delta,
+        )
+        clients = build_stage_clients(config)
+        for sample in samples:
+            predictions.append(_predict_sample(sample, config, clients, close_book=close_book))
+    else:
+        endpoint = EndpointConfig(base_url=base_url, api_key_env=api_key_env, model=model)
+        resolved_configs: dict[RegulatoryDomain, tuple[TFBearConfig, StageClients]] = {}
+        for sample in samples:
+            sample_domain = resolved_domain or sample.domain
+            if sample_domain not in resolved_configs:
+                pack = load_prompt_pack(sample_domain, resolved_expansion or "standard")
+                config = _build_pack_config(
+                    pack,
+                    endpoint=endpoint,
+                    tau_posterior=tau_posterior,
+                    tau_delta=tau_delta,
+                )
+                resolved_configs[sample_domain] = (config, build_stage_clients(config))
+            config, clients = resolved_configs[sample_domain]
+            predictions.append(_predict_sample(sample, config, clients, close_book=close_book))
 
     out_path = Path(output)
     write_predictions(out_path, predictions)

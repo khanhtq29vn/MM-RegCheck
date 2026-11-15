@@ -82,6 +82,46 @@ uv run python scripts/run_tfbear_benchmark.py \
   --base-url https://your-endpoint.example/v1 --model your-model-id
 ```
 
+### Per-domain prompt packs (`--domain` / `--expansion`)
+
+The draft's six per-domain prompt files are ported to
+`mmregcheck.pillar2.prompts` (`beauty.py`, `healthcare.py`). Select one from the CLI or the
+benchmark script:
+
+```bash
+# One domain, one expansion variant
+uv run mmregcheck run-tfbear data/dev_sample_5.jsonl \
+  --base-url https://your-endpoint.example/v1 --model your-model-id \
+  --domain Beauty --expansion tot --out predictions.jsonl
+
+# Mixed-domain split: each sample's own `domain` field selects its pack
+uv run mmregcheck run-tfbear data/dev_sample_5.jsonl \
+  --base-url https://your-endpoint.example/v1 --model your-model-id \
+  --expansion cot-sc --out predictions.jsonl
+```
+
+`--expansion` accepts `standard`, `cot-sc` and `tot` (default `standard`). `--domain` accepts
+`Beauty` or `Healthcare` (case-insensitive); when it is omitted, each sample uses its own
+`domain` field. When **neither** option is given, the original domain-neutral pipeline is used.
+The same options exist on `scripts/run_tfbear_benchmark.py`.
+
+Programmatic access uses the same packs:
+
+```python
+from mmregcheck.pillar2.clients import EndpointConfig
+from mmregcheck.pillar2.prompts import load_prompt_pack
+from mmregcheck.schemas import RegulatoryDomain
+
+pack = load_prompt_pack(RegulatoryDomain.BEAUTY, "cot-sc")
+config = pack.to_config(
+    endpoint=EndpointConfig(base_url="...", api_key_env="OPENAI_API_KEY", model="..."),
+)
+```
+
+`PromptPack` is frozen and validates every template at import time. `pack.expansion_kwargs()`
+exposes the draft's hyperparameters (path count, temperatures, ToT search width) for callers
+that build strategies themselves.
+
 ### Custom strategies
 
 Every stage is an injectable strategy. Subclass the matching `Base*Strategy` from
@@ -105,8 +145,8 @@ propagates `verbose`, `max_retry` and `reasoning` to it. Prompt templates are va
 construction: a template may only reference the placeholders listed in
 `STATE_FIELDS` (`mmregcheck.pillar2.pipeline_state`), for example `{text_claim}`,
 `{retrieved_regulatory_context}`, `{state}`, `{paths}` and `{verdict}`. The defaults in
-`mmregcheck.pillar2.config` are domain-neutral; for benchmark runs supply the per-domain prompt
-packs from the reference implementation.
+`mmregcheck.pillar2.config` are domain-neutral; benchmark runs should use the per-domain packs
+in `mmregcheck.pillar2.prompts` (see above).
 
 ---
 
