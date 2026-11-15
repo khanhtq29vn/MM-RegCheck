@@ -142,15 +142,26 @@ def test_blank_completions_are_not_turned_into_nodes() -> None:
         strategy.expand(_state(), client, "fake-model")
 
 
-def test_empty_content_choices_are_skipped() -> None:
+def test_empty_content_choices_are_skipped_when_enough_remain() -> None:
     client = FakeClient(lambda _prompt: ["", "usable path"])
-    strategy = StandardExpansionStrategy(n_paths=2, prompt_template="{text_claim}")
+    strategy = StandardExpansionStrategy(n_paths=1, prompt_template="{text_claim}")
 
     nodes = strategy.expand(_state(), client, "fake-model")
 
     assert len(nodes) == 1
     assert nodes[0].state == "usable path"
     assert nodes[0].meta["choice_index"] == 1
+
+
+@pytest.mark.parametrize("strategy_cls", [StandardExpansionStrategy, CoTSCExpansionStrategy])
+def test_fewer_paths_than_requested_raises(
+    strategy_cls: type[StandardExpansionStrategy] | type[CoTSCExpansionStrategy],
+) -> None:
+    client = FakeClient(lambda _prompt: ["", "only usable path"])
+    strategy = strategy_cls(n_paths=3, prompt_template="{text_claim}")
+
+    with pytest.raises(ValueError, match=r"n_paths=3 .* only 1 usable"):
+        strategy.expand(_state(), client, "fake-model")
 
 
 def test_retry_budget_is_bounded_and_raises_when_exhausted(
@@ -211,7 +222,7 @@ def test_default_strategy_name_is_exposed(
     strategy_cls: type[StandardExpansionStrategy] | type[CoTSCExpansionStrategy],
 ) -> None:
     strategy = strategy_cls(prompt_template="{text_claim}")
-    client = FakeClient(lambda _prompt: ["path"])
+    client = FakeClient(lambda _prompt: ["path"] * strategy.n_paths)
 
     nodes = strategy.expand(_state(), client, "fake-model")
 

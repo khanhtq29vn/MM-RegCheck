@@ -73,4 +73,10 @@ class CoTSCExpansionStrategy(BaseExpansionStrategy):
 
         if not nodes:
             raise ValueError(f"{type(self).__name__}: the model returned no usable completion.")
+        if len(nodes) < self.n_paths:
+            raise ValueError(
+                f"{type(self).__name__}: requested n_paths={self.n_paths} but the endpoint "
+                f"returned only {len(nodes)} usable completion(s). The endpoint may ignore the "
+                "`n` parameter; use one that supports it."
+            )
         return nodes
