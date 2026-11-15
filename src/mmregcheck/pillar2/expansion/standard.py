@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 from mmregcheck.pillar2.base import BaseExpansionStrategy
-from mmregcheck.pillar2.expansion._common import sampled_texts
+from mmregcheck.pillar2.diagnostics import TFBearWarning
+from mmregcheck.pillar2.expansion._common import (
+    record_truncated_completions,
+    sampled_texts,
+)
 from mmregcheck.pillar2.llm import create_completion
 from mmregcheck.pillar2.pipeline_state import Node, TFBearState
 
@@ -16,22 +21,28 @@ STANDARD_STRATEGY = "standard"
 class StandardExpansionStrategy(BaseExpansionStrategy):
     """Zero-shot baseline: one direct reasoning path per sampled completion.
 
-    `temperature` defaults to 0.0 (greedy), so a request with `n_paths > 1` only produces
-    diverse paths when the caller raises it; pass `temperature=0.2` to sample several
-    independent paths from the same prompt.
+    The default sampling setting is `temperature=0.2`, `top_p=0.95` and `max_tokens=1024`, so a
+    request with `n_paths > 1` produces diverse paths. A temperature of 0.0 with more than one
+    path is allowed but emits a `TFBearWarning`, because greedy sampling makes the paths likely
+    to be identical.
 
     Args:
         n_paths: Number of independent completions requested from the API.
-        max_tokens: Token budget per completion.
-        temperature: Sampling temperature.
+        max_tokens: Token budget per completion; defaults to 1024.
+        temperature: Sampling temperature; defaults to 0.2.
+        top_p: Nucleus threshold; defaults to 0.95.
+        prompt_template: Direct reasoning prompt.
+        verbose: Enables verbose stage logging.
+        max_retry: Retry budget of the LLM call.
     """
 
     def __init__(
         self,
         n_paths: int = 1,
         prompt_template: str = "",
-        max_tokens: int = 512,
-        temperature: float = 0.0,
+        max_tokens: int = 1024,
+        temperature: float = 0.2,
+        top_p: float = 0.95,
         verbose: bool = False,
         max_retry: int = 3,
     ) -> None:
@@ -39,9 +50,18 @@ class StandardExpansionStrategy(BaseExpansionStrategy):
         self.n_paths = n_paths
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.top_p = top_p
 
     def expand(self, state: TFBearState, client: Any, model: str) -> list[Node]:
         """Return one terminal `Node` per non-empty completion of the direct prompt."""
+        if self.n_paths > 1 and self.temperature == 0.0:
+            warnings.warn(
+                f"{type(self).__name__}: n_paths={self.n_paths} with temperature=0.0; "
+                "the sampled paths may be identical.",
+                TFBearWarning,
+                stacklevel=2,
+            )
+
         prompt = state.render(self.prompt_template)
         self.logger.log_info(f"Prompt:\n{prompt}", style="dim")
         messages = [{"role": "user", "content": prompt}]
@@ -56,8 +76,14 @@ class StandardExpansionStrategy(BaseExpansionStrategy):
             n=self.n_paths,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
-            top_p=1.0,
+            top_p=self.top_p,
             reasoning=self.reasoning,
+        )
+        record_truncated_completions(
+            type(self).__name__,
+            response,
+            max_tokens=self.max_tokens,
+            diagnostics=state.diagnostics,
         )
 
         nodes: list[Node] = []
@@ -74,10 +100,10 @@ class StandardExpansionStrategy(BaseExpansionStrategy):
 
         if not nodes:
             raise ValueError(f"{type(self).__name__}: the model returned no usable completion.")
-        if len(nodes) < self.n_paths:
+        if len(nodes) != self.n_paths:
             raise ValueError(
                 f"{type(self).__name__}: requested n_paths={self.n_paths} but the endpoint "
-                f"returned only {len(nodes)} usable completion(s). The endpoint may ignore the "
-                "`n` parameter; use one that supports it."
+                f"returned {len(nodes)} usable completion(s). The endpoint must return exactly "
+                "n_paths usable completions; use one that honours the `n` parameter."
             )
         return nodes

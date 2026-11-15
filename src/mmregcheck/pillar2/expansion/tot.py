@@ -22,6 +22,8 @@ from collections.abc import Callable
 from typing import Any
 
 from mmregcheck.pillar2.base import BaseExpansionStrategy
+from mmregcheck.pillar2.diagnostics import record_diagnostic
+from mmregcheck.pillar2.expansion._common import record_truncated_completions
 from mmregcheck.pillar2.llm import create_completion
 from mmregcheck.pillar2.logger import TFBearLogger
 from mmregcheck.pillar2.pipeline_state import Node, TFBearState, validate_template
@@ -148,9 +150,14 @@ class TreeOfThoughts:
         min_steps: BFS levels to expand before honouring `terminate=true`.
         max_retry: Bound on retries per API call.
         max_tokens_thought_gen: Token budget of each thought-generation call.
+        thought_temperature: Sampling temperature of thought generation.
+        eval_temperature: Sampling temperature of state evaluation.
+        thought_top_p: Nucleus threshold of thought generation.
+        eval_top_p: Nucleus threshold of state evaluation.
         thought_response_format: `response_format` for thought generation.
         eval_response_format: `response_format` for state evaluation.
         reasoning: Provider-specific reasoning toggle forwarded to the API.
+        diagnostics: Run-level diagnostics collector; truncation is recorded there.
         logger: Verbose-gated logger; defaults to a silent one.
     """
 
@@ -168,10 +175,15 @@ class TreeOfThoughts:
         breadth_limit: int,
         min_steps: int = 1,
         max_retry: int = 3,
-        max_tokens_thought_gen: int = 1000,
+        max_tokens_thought_gen: int = 1024,
+        thought_temperature: float = 0.2,
+        eval_temperature: float = 0.2,
+        thought_top_p: float = 0.95,
+        eval_top_p: float = 0.95,
         thought_response_format: dict[str, Any] | None = None,
         eval_response_format: dict[str, Any] | None = None,
         reasoning: dict[str, Any] | None = None,
+        diagnostics: list[str] | None = None,
         logger: TFBearLogger | None = None,
     ) -> None:
         for name, value in (
@@ -197,13 +209,30 @@ class TreeOfThoughts:
         self.min_steps = max(1, int(min_steps))
         self.max_retry = max_retry
         self.max_tokens_thought_gen = max_tokens_thought_gen
+        self.thought_temperature = thought_temperature
+        self.eval_temperature = eval_temperature
+        self.thought_top_p = thought_top_p
+        self.eval_top_p = eval_top_p
         self.thought_response_format = thought_response_format
         self.eval_response_format = eval_response_format
         self.reasoning: dict[str, Any] = reasoning if reasoning is not None else {"enabled": False}
+        self.diagnostics = diagnostics
         self.logger = logger if logger is not None else TFBearLogger(verbose=False)
 
-    def _chat(self, prompt: str, *, n: int, **kwargs: Any) -> list[str]:
+    def _chat(
+        self,
+        prompt: str,
+        *,
+        n: int,
+        temperature: float,
+        top_p: float,
+        max_tokens: int | None = None,
+        **kwargs: Any,
+    ) -> list[str]:
         """Call the model once and return the raw completion strings."""
+        request: dict[str, Any] = {"top_p": top_p}
+        if max_tokens is not None:
+            request["max_tokens"] = max_tokens
         response = create_completion(
             self.client,
             model=self.model,
@@ -212,10 +241,16 @@ class TreeOfThoughts:
             logger=self.logger,
             context="TreeOfThoughts",
             n=n,
-            temperature=0.7,
-            top_p=1.0,
+            temperature=temperature,
             reasoning=self.reasoning,
+            **request,
             **kwargs,
+        )
+        record_truncated_completions(
+            "TreeOfThoughts",
+            response,
+            max_tokens=max_tokens,
+            diagnostics=self.diagnostics,
         )
         return [str(choice.message.content or "") for choice in response.choices]
 
@@ -232,7 +267,12 @@ class TreeOfThoughts:
             kwargs["response_format"] = self.thought_response_format
 
         raw_responses = self._chat(
-            prompt, n=self.n_candidates, max_tokens=self.max_tokens_thought_gen, **kwargs
+            prompt,
+            n=self.n_candidates,
+            temperature=self.thought_temperature,
+            top_p=self.thought_top_p,
+            max_tokens=self.max_tokens_thought_gen,
+            **kwargs,
         )
 
         thoughts: list[str] = []
@@ -262,7 +302,13 @@ class TreeOfThoughts:
         if self.eval_response_format is not None:
             kwargs["response_format"] = self.eval_response_format
 
-        raw_evaluations = self._chat(prompt, n=self.n_evals, **kwargs)
+        raw_evaluations = self._chat(
+            prompt,
+            n=self.n_evals,
+            temperature=self.eval_temperature,
+            top_p=self.eval_top_p,
+            **kwargs,
+        )
         parsed = [_parse_json_object(raw, context="state evaluation") for raw in raw_evaluations]
         value = self.heuristic_calculator(state, parsed)
         self.logger.log_info(f"  State value={value:.4f}", style="dim")
@@ -401,8 +447,12 @@ class ToTExpansionStrategy(BaseExpansionStrategy):
             `{retrieved_regulatory_context}` and `{state}`.
         eval_prompt_template: Branch-evaluation prompt with the same placeholders as
             `prompt_template`.
-        max_tokens_thought_gen: Token budget of each thought-generation call.
+        max_tokens_thought_gen: Token budget of each thought-generation call; defaults to 1024.
         min_steps: BFS levels to expand before honouring `terminate=true`.
+        thought_temperature: Sampling temperature of thought generation; defaults to 0.2.
+        eval_temperature: Sampling temperature of state evaluation; defaults to 0.2.
+        thought_top_p: Nucleus threshold of thought generation; defaults to 0.95.
+        eval_top_p: Nucleus threshold of state evaluation; defaults to 0.95.
         thought_response_format: `response_format` for thought generation; defaults to JSON mode.
         eval_response_format: `response_format` for state evaluation; defaults to JSON mode.
     """
@@ -415,8 +465,12 @@ class ToTExpansionStrategy(BaseExpansionStrategy):
         breadth_limit: int = 3,
         prompt_template: str = "",
         eval_prompt_template: str = "",
-        max_tokens_thought_gen: int = 1500,
+        max_tokens_thought_gen: int = 1024,
         min_steps: int = 1,
+        thought_temperature: float = 0.2,
+        eval_temperature: float = 0.2,
+        thought_top_p: float = 0.95,
+        eval_top_p: float = 0.95,
         verbose: bool = False,
         max_retry: int = 3,
         thought_response_format: dict[str, Any] | None = None,
@@ -432,6 +486,10 @@ class ToTExpansionStrategy(BaseExpansionStrategy):
             validate_template(eval_prompt_template, f"{type(self).__name__}.eval_prompt_template")
         self.max_tokens_thought_gen = max_tokens_thought_gen
         self.min_steps = min_steps
+        self.thought_temperature = thought_temperature
+        self.eval_temperature = eval_temperature
+        self.thought_top_p = thought_top_p
+        self.eval_top_p = eval_top_p
         self.thought_response_format: dict[str, Any] = (
             dict(thought_response_format)
             if thought_response_format is not None
@@ -456,7 +514,8 @@ class ToTExpansionStrategy(BaseExpansionStrategy):
 
         When the search produced no terminal node at all, its highest-valued fallback leaves are
         promoted to terminal so the scoring stage still receives candidates instead of crashing on
-        an empty set.
+        an empty set. The promotion is reported as a `TFBearWarning` and recorded on the run's
+        diagnostics, because those branches are partial reasoning rather than completed paths.
         """
         engine = TreeOfThoughts(
             client=client,
@@ -475,14 +534,27 @@ class ToTExpansionStrategy(BaseExpansionStrategy):
             min_steps=self.min_steps,
             max_retry=self.max_retry,
             max_tokens_thought_gen=self.max_tokens_thought_gen,
+            thought_temperature=self.thought_temperature,
+            eval_temperature=self.eval_temperature,
+            thought_top_p=self.thought_top_p,
+            eval_top_p=self.eval_top_p,
             thought_response_format=self.thought_response_format,
             eval_response_format=self.eval_response_format,
             reasoning=self.reasoning,
+            diagnostics=state.diagnostics,
             logger=self.logger,
         )
 
         completed = engine.bfs_exhaustive()
         has_terminal = any(tree_node.is_terminal for tree_node in completed)
+
+        if completed and not has_terminal:
+            record_diagnostic(
+                state.diagnostics,
+                f"{type(self).__name__}: no branch terminated within n_steps={self.n_steps}; "
+                f"promoted {len(completed)} non-terminal leaf/leaves to terminal for scoring.",
+                stacklevel=2,
+            )
 
         nodes: list[Node] = []
         for tree_node in completed:

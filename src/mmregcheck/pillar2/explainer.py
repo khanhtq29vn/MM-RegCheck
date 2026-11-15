@@ -133,8 +133,9 @@ class GenerativeExplanationStrategy(BaseExplanationStrategy):
     Args:
         prompt_template: May reference `{text_claim}`, `{retrieved_regulatory_context}`,
             `{verdict}` and `{paths}`.
-        max_tokens: Token budget of the explanation call.
-        temperature: Sampling temperature.
+        max_tokens: Token budget of the explanation call; defaults to 1024.
+        temperature: Sampling temperature; defaults to 0.3.
+        top_p: Nucleus threshold; defaults to 0.95.
     """
 
     def __init__(
@@ -142,6 +143,7 @@ class GenerativeExplanationStrategy(BaseExplanationStrategy):
         prompt_template: str = DEFAULT_EXPLANATION_PROMPT,
         max_tokens: int = 1024,
         temperature: float = 0.3,
+        top_p: float = 0.95,
         verbose: bool = False,
         max_retry: int = 3,
         reasoning: dict[str, Any] | None = None,
@@ -154,6 +156,7 @@ class GenerativeExplanationStrategy(BaseExplanationStrategy):
         )
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.top_p = top_p
 
     def explain(self, state: TFBearState, client: Any, model: str) -> str:
         """Return the model's natural-language explanation of `state.adjudication`."""
@@ -173,6 +176,7 @@ class GenerativeExplanationStrategy(BaseExplanationStrategy):
             context=type(self).__name__,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+            top_p=self.top_p,
             reasoning=self.reasoning,
         )
         if not response.choices:
@@ -198,8 +202,9 @@ class StructuredGenerativeExplanationStrategy(BaseExplanationStrategy):
         schema_name: Name registered with the API for the schema.
         prompt_template: May reference `{text_claim}`, `{retrieved_regulatory_context}`,
             `{verdict}` and `{paths}`.
-        max_tokens: Token budget of the structured call.
+        max_tokens: Token budget of the structured call; defaults to 1024.
         temperature: Sampling temperature; 0.0 keeps the JSON output deterministic.
+        top_p: Nucleus threshold; defaults to 0.95.
     """
 
     def __init__(
@@ -209,6 +214,7 @@ class StructuredGenerativeExplanationStrategy(BaseExplanationStrategy):
         prompt_template: str = DEFAULT_STRUCTURED_EXPLANATION_PROMPT,
         max_tokens: int = 1024,
         temperature: float = 0.0,
+        top_p: float = 0.95,
         verbose: bool = False,
         max_retry: int = 3,
         reasoning: dict[str, Any] | None = None,
@@ -223,6 +229,7 @@ class StructuredGenerativeExplanationStrategy(BaseExplanationStrategy):
         self.schema_name = schema_name
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.top_p = top_p
 
     def explain(self, state: TFBearState, client: Any, model: str) -> str:
         """Return a JSON string conforming to `output_schema`.
@@ -262,6 +269,7 @@ class StructuredGenerativeExplanationStrategy(BaseExplanationStrategy):
                         {
                             "temperature": self.temperature,
                             "max_tokens": self.max_tokens,
+                            "top_p": self.top_p,
                             "reasoning": self.reasoning,
                             "response_format": response_format,
                         }

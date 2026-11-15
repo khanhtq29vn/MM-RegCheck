@@ -7,12 +7,14 @@ exercised without any network access.
 from __future__ import annotations
 
 import json
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
+from mmregcheck.pillar2.diagnostics import TFBearWarning
 from mmregcheck.pillar2.expansion.tot import (
     TOT_STRATEGY,
     ExpansionParseError,
@@ -29,6 +31,7 @@ class _Message:
 @dataclass
 class _Choice:
     message: _Message
+    finish_reason: str | None = None
 
 
 @dataclass
@@ -131,8 +134,13 @@ def test_bfs_respects_configured_breadth_and_depth() -> None:
     # Final-level nodes are never expanded, so they are not evaluated either.
     assert len(eval_calls) == 4
     assert all(call["n"] == 2 for call in thought_calls)
+    assert all(call["temperature"] == 0.2 for call in thought_calls)
+    assert all(call["top_p"] == 0.95 for call in thought_calls)
+    assert all(call["max_tokens"] == 1024 for call in thought_calls)
     assert all(call["response_format"] == {"type": "json_object"} for call in thought_calls)
     assert all(call["n"] == 1 for call in eval_calls)
+    assert all(call["temperature"] == 0.2 for call in eval_calls)
+    assert all(call["top_p"] == 0.95 for call in eval_calls)
 
 
 def test_bfs_collects_terminals_and_keeps_expanding_siblings() -> None:
@@ -243,3 +251,71 @@ def test_unknown_placeholders_are_rejected_at_construction() -> None:
         _tot(prompt_template="{claim}")
     with pytest.raises(ValueError, match="eval_prompt_template"):
         _tot(eval_prompt_template="{retrieved_context}")
+
+
+def test_default_sampling_settings_are_the_documented_ones() -> None:
+    strategy = ToTExpansionStrategy(prompt_template="{text_claim}", eval_prompt_template="{state}")
+
+    assert strategy.max_tokens_thought_gen == 1024
+    assert strategy.thought_temperature == 0.2
+    assert strategy.eval_temperature == 0.2
+    assert strategy.thought_top_p == 0.95
+    assert strategy.eval_top_p == 0.95
+
+
+def test_no_terminal_branch_warns_and_records_the_promotion() -> None:
+    client = _scripted_client(lambda _current: [_thought("only step")])
+    state = _state()
+
+    with pytest.warns(TFBearWarning, match="promoted 1 non-terminal"):
+        nodes = _tot(n_steps=1, k=1).expand(state, client, "fake-model")
+
+    assert len(nodes) == 1
+    assert nodes[0].is_terminal is True
+    assert len(state.diagnostics) == 1
+    assert "no branch terminated within n_steps=1" in state.diagnostics[0]
+
+
+def test_terminal_branch_does_not_warn_about_promotion() -> None:
+    client = _scripted_client(
+        lambda _current: [_thought("done", terminate=True, answer="Compliant")]
+    )
+    state = _state()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", TFBearWarning)
+        nodes = _tot(n_steps=1, k=1).expand(state, client, "fake-model")
+
+    assert len(nodes) == 1
+    assert nodes[0].is_terminal is True
+    assert state.diagnostics == []
+
+
+def test_truncated_thought_generation_is_warned_and_recorded() -> None:
+    thought = _thought("cut off mid-reasoning")
+
+    class _CutCompletions:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
+
+        def create(self, **kwargs: Any) -> _Response:
+            self.calls.append(kwargs)
+            return _Response([_Choice(_Message(thought), "length")])
+
+    class _CutChat:
+        def __init__(self, completions: _CutCompletions) -> None:
+            self.completions = completions
+
+    class _CutClient:
+        def __init__(self) -> None:
+            self.chat = _CutChat(_CutCompletions())
+
+    state = _state()
+
+    with pytest.warns(TFBearWarning, match="finish_reason='length'"):
+        nodes = _tot(n_steps=1, k=1).expand(state, _CutClient(), "fake-model")
+
+    assert len(nodes) == 1
+    assert len(state.diagnostics) == 2
+    assert any("finish_reason='length'" in message for message in state.diagnostics)
+    assert any("promoted 1 non-terminal" in message for message in state.diagnostics)

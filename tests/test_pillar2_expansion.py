@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from mmregcheck.pillar2.diagnostics import TFBearWarning
 from mmregcheck.pillar2.expansion import (
     COT_SC_STRATEGY,
     STANDARD_STRATEGY,
@@ -30,6 +31,7 @@ class _Message:
 @dataclass
 class _Choice:
     message: _Message
+    finish_reason: str | None = None
 
 
 @dataclass
@@ -99,7 +101,9 @@ def test_standard_returns_one_direct_path() -> None:
         }
     ]
     assert call["n"] == 1
-    assert call["temperature"] == 0.0
+    assert call["temperature"] == 0.2
+    assert call["top_p"] == 0.95
+    assert call["max_tokens"] == 1024
     assert "reasoning" not in call
     assert "extra_body" not in call
 
@@ -121,7 +125,9 @@ def test_cot_sc_returns_n_paths_with_distinct_meta_indices() -> None:
 
     call = client.calls[0]
     assert call["n"] == 3
-    assert call["temperature"] == 0.7
+    assert call["temperature"] == 0.2
+    assert call["top_p"] == 0.95
+    assert call["max_tokens"] == 1024
     assert call["messages"][0]["content"].endswith(":: take 3 independent paths")
 
 
@@ -160,8 +166,73 @@ def test_fewer_paths_than_requested_raises(
     client = FakeClient(lambda _prompt: ["", "only usable path"])
     strategy = strategy_cls(n_paths=3, prompt_template="{text_claim}")
 
-    with pytest.raises(ValueError, match=r"n_paths=3 .* only 1 usable"):
+    with pytest.raises(ValueError, match=r"requested n_paths=3.*returned 1 usable"):
         strategy.expand(_state(), client, "fake-model")
+
+
+@pytest.mark.parametrize("strategy_cls", [StandardExpansionStrategy, CoTSCExpansionStrategy])
+def test_more_paths_than_requested_raises(
+    strategy_cls: type[StandardExpansionStrategy] | type[CoTSCExpansionStrategy],
+) -> None:
+    client = FakeClient(lambda _prompt: ["path a", "path b", "path c", "path d"])
+    strategy = strategy_cls(n_paths=3, prompt_template="{text_claim}")
+
+    with pytest.raises(ValueError, match=r"requested n_paths=3.*returned 4 usable"):
+        strategy.expand(_state(), client, "fake-model")
+
+
+@pytest.mark.parametrize("strategy_cls", [StandardExpansionStrategy, CoTSCExpansionStrategy])
+def test_greedy_sampling_with_several_paths_warns(
+    strategy_cls: type[StandardExpansionStrategy] | type[CoTSCExpansionStrategy],
+) -> None:
+    client = FakeClient(lambda _prompt: ["path a", "path b"])
+    strategy = strategy_cls(n_paths=2, temperature=0.0, prompt_template="{text_claim}")
+
+    with pytest.warns(TFBearWarning, match="may be identical"):
+        nodes = strategy.expand(_state(), client, "fake-model")
+
+    assert len(nodes) == 2
+
+
+@pytest.mark.parametrize("strategy_cls", [StandardExpansionStrategy, CoTSCExpansionStrategy])
+def test_sampling_warns_only_for_greedy_multi_path_requests(
+    strategy_cls: type[StandardExpansionStrategy] | type[CoTSCExpansionStrategy],
+    recwarn: pytest.WarningsRecorder,
+) -> None:
+    one_path = strategy_cls(n_paths=1, temperature=0.0, prompt_template="{text_claim}")
+    one_path.expand(_state(), FakeClient(lambda _prompt: ["path"]), "fake-model")
+
+    sampled = strategy_cls(n_paths=2, temperature=0.2, prompt_template="{text_claim}")
+    sampled.expand(_state(), FakeClient(lambda _prompt: ["path a", "path b"]), "fake-model")
+
+    assert not [warning for warning in recwarn if issubclass(warning.category, TFBearWarning)]
+
+
+@pytest.mark.parametrize("strategy_cls", [StandardExpansionStrategy, CoTSCExpansionStrategy])
+def test_truncated_completion_is_warned_and_recorded(
+    strategy_cls: type[StandardExpansionStrategy] | type[CoTSCExpansionStrategy],
+) -> None:
+    class _CutCompletions(_FakeCompletions):
+        def create(self, **kwargs: Any) -> _Response:
+            self.calls.append(kwargs)
+            return _Response([_Choice(_Message("cut off mid-argument"), "length")])
+
+    class _CutChat:
+        def __init__(self, completions: _CutCompletions) -> None:
+            self.completions = completions
+
+    class _CutClient:
+        def __init__(self) -> None:
+            self.chat = _CutChat(_CutCompletions(lambda _prompt: []))
+
+    state = _state()
+    strategy = strategy_cls(n_paths=1, prompt_template="{text_claim}")
+
+    with pytest.warns(TFBearWarning, match="finish_reason='length'"):
+        strategy.expand(state, _CutClient(), "fake-model")
+
+    assert len(state.diagnostics) == 1
+    assert "finish_reason='length'" in state.diagnostics[0]
 
 
 def test_retry_budget_is_bounded_and_raises_when_exhausted(

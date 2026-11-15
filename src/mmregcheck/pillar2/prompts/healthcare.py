@@ -356,8 +356,8 @@ HEALTHCARE_PACKS: dict[ExpansionName, PromptPack] = {
         scoring=_SCORING_PROMPT,
         explanation=_EXPLANATION_PROMPT,
         n_paths=3,
-        expansion_max_tokens=512,
-        expansion_temperature=0.7,
+        expansion_max_tokens=1024,
+        expansion_temperature=0.2,
     ),
     "cot-sc": PromptPack(
         domain=RegulatoryDomain.HEALTHCARE,
@@ -367,8 +367,8 @@ HEALTHCARE_PACKS: dict[ExpansionName, PromptPack] = {
         scoring=_SCORING_PROMPT,
         explanation=_EXPLANATION_PROMPT,
         n_paths=3,
-        expansion_max_tokens=2000,
-        expansion_temperature=0.7,
+        expansion_max_tokens=1024,
+        expansion_temperature=0.2,
     ),
     "tot": PromptPack(
         domain=RegulatoryDomain.HEALTHCARE,
