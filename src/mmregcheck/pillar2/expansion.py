@@ -32,6 +32,22 @@ COT_SC_STRATEGY = "cot-sc"
 _MAX_BACKOFF_SECONDS = 8.0
 
 
+def _with_reasoning(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Move the `reasoning` option into `extra_body`.
+
+    The OpenAI SDK rejects unknown keyword arguments, and providers that support reasoning
+    expect the field in the request body. A disabled option is not sent at all, so strict
+    OpenAI-compatible endpoints never see it.
+    """
+    out = dict(kwargs)
+    reasoning = out.pop("reasoning", None)
+    if reasoning and reasoning.get("enabled"):
+        extra_body = dict(out.get("extra_body") or {})
+        extra_body["reasoning"] = reasoning
+        out["extra_body"] = extra_body
+    return out
+
+
 def _create_completion(
     client: Any,
     *,
@@ -54,7 +70,9 @@ def _create_completion(
     last_exc: Exception | None = None
     for attempt in range(1, max_retry + 1):
         try:
-            return client.chat.completions.create(model=model, messages=messages, **kwargs)
+            return client.chat.completions.create(
+                model=model, messages=messages, **_with_reasoning(kwargs)
+            )
         except Exception as exc:
             last_exc = exc
             logger.log_warning(f"{context}: attempt {attempt}/{max_retry} failed: {exc}")

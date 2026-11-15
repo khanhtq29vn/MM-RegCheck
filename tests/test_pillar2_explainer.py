@@ -129,7 +129,8 @@ def test_generative_happy_path_renders_state_and_returns_text(
     assert call["model"] == "fake-model"
     assert call["temperature"] == 0.3
     assert call["max_tokens"] == 1024
-    assert call["reasoning"] == {"enabled": False}
+    assert "reasoning" not in call
+    assert "extra_body" not in call
 
 
 def test_generative_uses_all_branches_before_adjudication() -> None:

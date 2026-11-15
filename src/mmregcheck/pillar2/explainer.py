@@ -25,7 +25,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from mmregcheck.pillar2.base import BaseExplanationStrategy
-from mmregcheck.pillar2.expansion import _create_completion
+from mmregcheck.pillar2.expansion import _create_completion, _with_reasoning
 from mmregcheck.pillar2.pipeline_state import TFBearState
 from mmregcheck.schemas import TechniqueVerdictItem, TFBearBranchTrace, aggregate_strict_hierarchy
 
@@ -257,10 +257,14 @@ class StructuredGenerativeExplanationStrategy(BaseExplanationStrategy):
                 response = client.chat.completions.create(
                     model=model,
                     messages=messages,
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                    reasoning=self.reasoning,
-                    response_format=response_format,
+                    **_with_reasoning(
+                        {
+                            "temperature": self.temperature,
+                            "max_tokens": self.max_tokens,
+                            "reasoning": self.reasoning,
+                            "response_format": response_format,
+                        }
+                    ),
                 )
                 raw = str(response.choices[0].message.content or "").strip()
                 parsed = _parse_json_object(raw, context=type(self).__name__)

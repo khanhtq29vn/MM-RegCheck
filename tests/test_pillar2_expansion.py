@@ -100,7 +100,8 @@ def test_standard_returns_one_direct_path() -> None:
     ]
     assert call["n"] == 1
     assert call["temperature"] == 0.0
-    assert call["reasoning"] == {"enabled": False}
+    assert "reasoning" not in call
+    assert "extra_body" not in call
 
 
 def test_cot_sc_returns_n_paths_with_distinct_meta_indices() -> None:
@@ -126,9 +127,7 @@ def test_cot_sc_returns_n_paths_with_distinct_meta_indices() -> None:
 
 def test_cot_sc_temperature_override_is_forwarded() -> None:
     client = FakeClient(lambda _prompt: ["only path"])
-    strategy = CoTSCExpansionStrategy(
-        n_paths=1, temperature=0.2, prompt_template="{text_claim}"
-    )
+    strategy = CoTSCExpansionStrategy(n_paths=1, temperature=0.2, prompt_template="{text_claim}")
 
     strategy.expand(_state(), client, "fake-model")
 
@@ -145,9 +144,7 @@ def test_blank_completions_are_not_turned_into_nodes() -> None:
 
 def test_empty_content_choices_are_skipped() -> None:
     client = FakeClient(lambda _prompt: ["", "usable path"])
-    strategy = StandardExpansionStrategy(
-        n_paths=2, prompt_template="{text_claim}"
-    )
+    strategy = StandardExpansionStrategy(n_paths=2, prompt_template="{text_claim}")
 
     nodes = strategy.expand(_state(), client, "fake-model")
 
@@ -182,9 +179,7 @@ def test_retry_recovers_within_budget(monkeypatch: pytest.MonkeyPatch) -> None:
         return ["recovered path"]
 
     client = FakeClient(_flaky)
-    strategy = CoTSCExpansionStrategy(
-        n_paths=1, prompt_template="{text_claim}", max_retry=3
-    )
+    strategy = CoTSCExpansionStrategy(n_paths=1, prompt_template="{text_claim}", max_retry=3)
     monkeypatch.setattr("mmregcheck.pillar2.expansion.time.sleep", lambda _seconds: None)
 
     nodes = strategy.expand(_state(), client, "fake-model")
@@ -222,3 +217,14 @@ def test_default_strategy_name_is_exposed(
 
     expected = STANDARD_STRATEGY if strategy_cls is StandardExpansionStrategy else COT_SC_STRATEGY
     assert nodes[0].meta["strategy"] == expected
+
+
+def test_enabled_reasoning_goes_to_extra_body() -> None:
+    client = FakeClient(lambda _prompt: ["path"])
+    strategy = StandardExpansionStrategy(prompt_template="{text_claim}")
+    strategy.reasoning = {"enabled": True, "effort": "low"}
+    strategy.expand(TFBearState(text_claim="claim"), client, "fake-model")
+
+    call = client.calls[0]
+    assert "reasoning" not in call
+    assert call["extra_body"] == {"reasoning": {"enabled": True, "effort": "low"}}
