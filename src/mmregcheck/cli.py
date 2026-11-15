@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -23,7 +24,7 @@ console = Console()
 
 @app.command("validate-submission")
 def validate_submission(
-    submission_path: Path = typer.Argument(..., help="Path to predictions .jsonl file."),
+    submission_path: Annotated[Path, typer.Argument(help="Path to predictions .jsonl file.")],
 ) -> None:
     """Validate a model submission file before opening a Leaderboard Pull Request."""
     preds = MedRegEvaluator.validate_submission_file(submission_path)
