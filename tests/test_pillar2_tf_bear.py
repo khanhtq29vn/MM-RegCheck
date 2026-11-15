@@ -337,8 +337,18 @@ def test_importing_pillar2_does_not_import_the_optional_llm_dependencies() -> No
     code = "\n".join(
         [
             "import sys",
+            "from importlib.abc import MetaPathFinder",
             "from pathlib import Path",
             "import mmregcheck",
+            "",
+            "class _BlockOptional(MetaPathFinder):",
+            "    def find_spec(self, fullname, path, target=None):",
+            "        blocked = fullname == 'openai' or fullname.startswith('openai.')",
+            "        if blocked or fullname == 'json_repair':",
+            "            raise ImportError(fullname + ' is not installed')",
+            "        return None",
+            "",
+            "sys.meta_path.insert(0, _BlockOptional())",
             "import mmregcheck.pillar2",
             f"assert Path(mmregcheck.__file__).resolve().parents[1] == Path({str(src_root)!r})",
             "for name in ('openai', 'json_repair'):",
