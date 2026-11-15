@@ -16,9 +16,9 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
-from mmregcheck.pillar2.clients import EndpointConfig
 from mmregcheck.pillar2.config import TFBearConfig
 from mmregcheck.pillar2.engine import StageClients, build_stage_clients, run_tfbear
+from mmregcheck.pillar2.llm import EndpointConfig
 from mmregcheck.pillar2.prompts import (
     load_prompt_pack,
     resolve_domain,

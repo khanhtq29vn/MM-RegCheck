@@ -13,8 +13,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from mmregcheck.pillar2.clients import ChatClient, ChatCompletions, ChatResource, build_client
 from mmregcheck.pillar2.config import TFBearConfig
+from mmregcheck.pillar2.llm import ChatClient, ChatCompletions, ChatResource, build_client
 from mmregcheck.pillar2.pipeline_state import TFBearState
 from mmregcheck.pillar2.results import StageUsage, TFBearResult
 

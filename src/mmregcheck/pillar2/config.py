@@ -28,8 +28,8 @@ from mmregcheck.pillar2.base import (
     BasePriorStrategy,
     BaseScoringStrategy,
 )
-from mmregcheck.pillar2.clients import EndpointConfig
 from mmregcheck.pillar2.expansion import StandardExpansionStrategy
+from mmregcheck.pillar2.llm import EndpointConfig
 from mmregcheck.pillar2.logger import TFBearLogger
 from mmregcheck.pillar2.prior import LogprobPriorStrategy
 from mmregcheck.pillar2.scoring import CausalDeltaScoringStrategy

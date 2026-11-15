@@ -11,9 +11,9 @@ from rich.table import Table
 
 from mmregcheck import __version__
 from mmregcheck.evaluator import MedRegEvaluator
-from mmregcheck.pillar2.clients import EndpointConfig
 from mmregcheck.pillar2.config import TFBearConfig
 from mmregcheck.pillar2.engine import StageClients, build_stage_clients, run_tfbear
+from mmregcheck.pillar2.llm import EndpointConfig
 from mmregcheck.pillar2.prompts import (
     ExpansionName,
     PromptPack,

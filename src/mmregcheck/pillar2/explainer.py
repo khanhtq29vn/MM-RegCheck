@@ -25,7 +25,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from mmregcheck.pillar2.base import BaseExplanationStrategy
-from mmregcheck.pillar2.expansion._common import _create_completion, _with_reasoning
+from mmregcheck.pillar2.llm import create_completion, with_reasoning
 from mmregcheck.pillar2.pipeline_state import TFBearState
 from mmregcheck.schemas import TechniqueVerdictItem, TFBearBranchTrace, aggregate_strict_hierarchy
 
@@ -163,7 +163,7 @@ class GenerativeExplanationStrategy(BaseExplanationStrategy):
         )
         self.logger.log_info(f"Prompt (first 500 chars):\n{prompt[:500]}", style="dim")
 
-        response = _create_completion(
+        response = create_completion(
             client,
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -257,7 +257,7 @@ class StructuredGenerativeExplanationStrategy(BaseExplanationStrategy):
                 response = client.chat.completions.create(
                     model=model,
                     messages=messages,
-                    **_with_reasoning(
+                    **with_reasoning(
                         {
                             "temperature": self.temperature,
                             "max_tokens": self.max_tokens,

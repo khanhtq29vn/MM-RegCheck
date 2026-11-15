@@ -8,9 +8,9 @@ import pytest
 
 from mmregcheck.pillar2.adjudication import TFBearAdjudicationStrategy
 from mmregcheck.pillar2.base import BaseExplanationStrategy
-from mmregcheck.pillar2.clients import EndpointConfig
 from mmregcheck.pillar2.config import TFBearConfig
 from mmregcheck.pillar2.expansion import StandardExpansionStrategy
+from mmregcheck.pillar2.llm import EndpointConfig
 from mmregcheck.pillar2.pipeline_state import TFBearState
 from mmregcheck.pillar2.prior import LogprobPriorStrategy
 from mmregcheck.pillar2.scoring import CausalDeltaScoringStrategy

@@ -16,7 +16,7 @@ import time
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from mmregcheck.pillar2.clients import ChatClient, ChoiceLogprobs
+from mmregcheck.pillar2.llm.clients import ChatClient, ChoiceLogprobs
 from mmregcheck.schemas import ComplianceVerdict
 
 # Draft benchmark mapping (e.g. `examples/beauty/beauty_tot.py`): the digit the model emits

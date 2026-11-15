@@ -19,8 +19,7 @@ from __future__ import annotations
 from collections import Counter
 
 from mmregcheck.pillar2.base import BaseAdjudicationStrategy
-from mmregcheck.pillar2.clients import ChatClient
-from mmregcheck.pillar2.logprobs import label_distribution
+from mmregcheck.pillar2.llm import ChatClient, label_distribution
 from mmregcheck.pillar2.pipeline_state import TFBearState
 from mmregcheck.pillar2.results import TFBearAdjudicationResult
 from mmregcheck.schemas import ComplianceVerdict, TFBearBranchTrace

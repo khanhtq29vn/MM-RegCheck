@@ -14,7 +14,6 @@ from mmregcheck.pillar2.base import (
     BasePriorStrategy,
     BaseScoringStrategy,
 )
-from mmregcheck.pillar2.clients import EndpointConfig
 from mmregcheck.pillar2.config import TFBearConfig
 from mmregcheck.pillar2.engine import (
     StageClient,
@@ -22,6 +21,7 @@ from mmregcheck.pillar2.engine import (
     build_stage_clients,
     run_tfbear,
 )
+from mmregcheck.pillar2.llm import EndpointConfig
 from mmregcheck.pillar2.pipeline_state import Node, TFBearState
 from mmregcheck.schemas import ComplianceVerdict, TFBearBranchTrace
 
