@@ -74,6 +74,33 @@ with `mmregcheck validate-submission`. Pass `--api-key-env NAME` to read the key
 environment variable other than `OPENAI_API_KEY`. The pipeline is text-only in this release:
 `image_rel_path` is accepted but ignored.
 
+Sampling is set at run time. The defaults are T=0.2, top-p=0.95 and 1024 new tokens for expansion,
+and T=0.0 with a single token for the label-token elicitation:
+
+```bash
+uv run mmregcheck run-tfbear data/dev_sample_5.jsonl \
+  --base-url https://your-endpoint.example/v1 --model your-model-id \
+  --temperature 0.2 --top-p 0.95 --max-tokens 1024 \
+  --expansion-param n_paths=5 --verbose --resume --out predictions.jsonl
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `--temperature`, `--top-p`, `--max-tokens` | Sampling of the expansion, scoring and explanation calls. |
+| `--elicitation-temperature`, `--elicitation-top-p`, `--top-logprobs` | Sampling of the label-token elicitation and how many top logprobs to request. |
+| `--expansion-param KEY=VALUE` | Expansion-specific setting (repeatable), for example `n_paths=5`. An unknown key fails before any sample starts. |
+| `--verbose` | Log every stage to stderr. |
+| `--trace-path PATH` | Trace file, `<predictions>.trace.jsonl` by default. |
+| `--resume` | Skip the samples already present in the predictions file. |
+
+Besides the predictions, the run writes a JSON-lines trace (`tfbear-trace-v1`): one header with the
+effective settings (only the *name* of the API-key variable, never its value), then one record per
+sample with the prior, every branch (prior, posterior, log-odds delta, gate result), token usage,
+the explanation and diagnostics. Predictions and trace are written after every sample. A sample
+that fails is recorded in the trace and left out of the predictions, the run continues, and the exit
+code is 1. `TFBearWarning` messages (for example a label token missing from the returned top
+logprobs) are always printed to stderr, and a one-line summary closes the run.
+
 For batch runs and the open-book / close-book comparison used in the paper, use the script:
 
 ```bash
@@ -106,8 +133,9 @@ result = bear.run("A facility advertises a treatment.")
 ```
 
 `from_domain` accepts `Beauty` / `Healthcare` (case-insensitive) and `standard`, `cot-sc` or
-`tot`; extra keyword arguments such as `tau_posterior`, `tau_delta`, `max_retry` and `verbose`
-are forwarded to the prompt pack's `to_config`.
+`tot`; extra keyword arguments such as `tau_posterior`, `tau_delta`, `max_retry`, `verbose`,
+`temperature`, `top_p`, `max_tokens` and `expansion_params` (a mapping, for example
+`{"n_paths": 5}`) are forwarded to the prompt pack's `to_config`.
 
 For benchmark records, `run_sample` maps a `MedRegSampleInput` to a leaderboard
 `SubmissionPrediction`; `open_book=False` drops the retrieved regulatory context:
@@ -164,8 +192,8 @@ uv run mmregcheck run-tfbear data/dev_sample_5.jsonl \
 
 `--expansion` accepts `standard`, `cot-sc` and `tot` (default `standard`). `--domain` accepts
 `Beauty` or `Healthcare` (case-insensitive); when it is omitted, each sample uses its own
-`domain` field. When **neither** option is given, the original domain-neutral pipeline is used.
-The same options exist on `scripts/run_tfbear_benchmark.py`.
+`domain` field, and a sample without a domain is an error. The same options exist on
+`scripts/run_tfbear_benchmark.py`.
 
 Programmatic access uses the same packs:
 
