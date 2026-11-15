@@ -201,7 +201,7 @@ def test_pack_builds_the_matching_strategy_types(
         assert expansion_strategy.max_tokens == expected_max_tokens
 
 
-def test_pack_expansion_kwargs_match_the_draft_configuration() -> None:
+def test_pack_expansion_kwargs_reflect_the_pack_fields() -> None:
     standard = load_prompt_pack(RegulatoryDomain.BEAUTY, "standard").expansion_kwargs()
     assert standard == {
         "prompt_template": load_prompt_pack(RegulatoryDomain.BEAUTY, "standard").expansion_prompt,
@@ -240,7 +240,7 @@ def test_to_config_wires_the_pack_and_keeps_the_thresholds(
     assert config.adjudication_strategy.tau_posterior == 0.7
 
 
-def test_draft_label_mapping_is_preserved() -> None:
+def test_label_mapping_is_preserved() -> None:
     for domain in DOMAINS:
         for expansion in EXPANSIONS:
             pack = load_prompt_pack(domain, expansion)

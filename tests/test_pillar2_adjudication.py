@@ -1,4 +1,4 @@
-"""Tests for the default and draft-derived adjudication strategies."""
+"""Tests for the default and alternative adjudication strategies."""
 
 from __future__ import annotations
 
@@ -134,7 +134,7 @@ def test_majority_vote_counts_gate_passing_branches() -> None:
 
 
 def test_majority_vote_fallback_matches_the_default_and_reports_the_tally() -> None:
-    """Both fallbacks pick the summed-posterior argmax; the draft variant reports the tally."""
+    """Both fallbacks pick the summed-posterior argmax; the majority-vote strategy reports it."""
     branches = [
         _branch(
             "P1",
