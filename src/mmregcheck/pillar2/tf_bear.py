@@ -1,6 +1,6 @@
 """Module 3: Training-Free Bayesian Evidence Aggregation (TF-BEAR — Section 4.2).
 
-Implements the exact mathematical log-odds filtering and majority-vote adjudication
+Implements the log-odds filtering and majority-vote adjudication
 from Section 4.2 and Section 5.4 (Case Study). Hoang-An Vo can plug the VLM logprobs
 sampler directly into `TFBearAdjudicator.adjudicate_branches()`.
 """
@@ -20,6 +20,7 @@ class TFBearAdjudicationResult:
     final_verdict: ComplianceVerdict
     surviving_branches: list[TFBearBranchTrace]
     pruned_branches: list[TFBearBranchTrace]
+    used_fallback: bool = False
 
 
 class TFBearAdjudicator:
@@ -51,20 +52,34 @@ class TFBearAdjudicator:
 
         active_pool = surviving if surviving else branches
         vote_counts = Counter(b.predicted_verdict for b in active_pool)
+        posterior_tally = self._posterior_tally(branches)
 
-        # Strict Liability tie-breaking: prioritize Non-Compliant on ties
-        priority = {
-            ComplianceVerdict.NON_COMPLIANT: 3,
-            ComplianceVerdict.PARTLY_COMPLIANT: 2,
-            ComplianceVerdict.COMPLIANT: 1,
-        }
-        winner = max(
-            vote_counts.keys(),
-            key=lambda v: (vote_counts[v], priority[v]),
-        )
+        if surviving:
+            # Majority vote; ties resolved by the summed posterior over *all* branches.
+            winner = max(vote_counts, key=lambda v: (vote_counts[v], posterior_tally[v]))
+        else:
+            # No branch passed the causal filter: pick the label with the highest
+            # summed posterior across all generated branches (Appendix H fallback).
+            winner = max(ComplianceVerdict, key=lambda v: posterior_tally[v])
 
         return TFBearAdjudicationResult(
             final_verdict=winner,
             surviving_branches=surviving,
             pruned_branches=pruned,
+            used_fallback=not surviving,
         )
+
+    @staticmethod
+    def _posterior_tally(branches: list[TFBearBranchTrace]) -> dict[ComplianceVerdict, float]:
+        """Sum each label's posterior over every branch.
+
+        A branch without a full distribution contributes only the posterior of its own verdict.
+        """
+        tally = dict.fromkeys(ComplianceVerdict, 0.0)
+        for branch in branches:
+            if branch.posterior_distribution is None:
+                tally[branch.predicted_verdict] += branch.posterior_prob
+            else:
+                for verdict, prob in branch.posterior_distribution.items():
+                    tally[verdict] += prob
+        return tally
