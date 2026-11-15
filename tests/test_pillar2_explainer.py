@@ -159,7 +159,7 @@ def test_generative_retry_budget_is_bounded(monkeypatch: pytest.MonkeyPatch) -> 
 
     client = FakeClient(_always_fails)
     strategy = GenerativeExplanationStrategy(max_retry=2)
-    monkeypatch.setattr("mmregcheck.pillar2.expansion.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("mmregcheck.pillar2.expansion._common.time.sleep", lambda _seconds: None)
 
     with pytest.raises(RuntimeError, match="failed after 2 attempts"):
         strategy.explain(_state(), client, "fake-model")

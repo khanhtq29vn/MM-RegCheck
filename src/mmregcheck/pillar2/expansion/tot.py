@@ -22,7 +22,7 @@ from collections.abc import Callable
 from typing import Any
 
 from mmregcheck.pillar2.base import BaseExpansionStrategy
-from mmregcheck.pillar2.expansion import _create_completion
+from mmregcheck.pillar2.expansion._common import _create_completion
 from mmregcheck.pillar2.logger import TFBearLogger
 from mmregcheck.pillar2.pipeline_state import Node, TFBearState, validate_template
 
@@ -70,9 +70,7 @@ def _parse_json_object(raw: str, *, context: str) -> dict[str, Any]:
             ) from exc
 
     if not isinstance(parsed, dict):
-        raise ExpansionParseError(
-            f"{context}: model output is not a JSON object ({raw[:200]!r})."
-        )
+        raise ExpansionParseError(f"{context}: model output is not a JSON object ({raw[:200]!r}).")
     return parsed
 
 
@@ -201,9 +199,7 @@ class TreeOfThoughts:
         self.max_tokens_thought_gen = max_tokens_thought_gen
         self.thought_response_format = thought_response_format
         self.eval_response_format = eval_response_format
-        self.reasoning: dict[str, Any] = (
-            reasoning if reasoning is not None else {"enabled": False}
-        )
+        self.reasoning: dict[str, Any] = reasoning if reasoning is not None else {"enabled": False}
         self.logger = logger if logger is not None else TFBearLogger(verbose=False)
 
     def _chat(self, prompt: str, *, n: int, **kwargs: Any) -> list[str]:
@@ -267,9 +263,7 @@ class TreeOfThoughts:
             kwargs["response_format"] = self.eval_response_format
 
         raw_evaluations = self._chat(prompt, n=self.n_evals, **kwargs)
-        parsed = [
-            _parse_json_object(raw, context="state evaluation") for raw in raw_evaluations
-        ]
+        parsed = [_parse_json_object(raw, context="state evaluation") for raw in raw_evaluations]
         value = self.heuristic_calculator(state, parsed)
         self.logger.log_info(f"  State value={value:.4f}", style="dim")
         return value
@@ -362,8 +356,7 @@ class TreeOfThoughts:
                 next_level_nodes.sort(key=lambda n: n.value or 0.0, reverse=True)
                 kept_nodes = next_level_nodes[: self.breadth_limit]
                 self.logger.log_info(
-                    f"Step {step}: keeping top {len(kept_nodes)} of "
-                    f"{len(next_level_nodes)} nodes.",
+                    f"Step {step}: keeping top {len(kept_nodes)} of {len(next_level_nodes)} nodes.",
                     style="dim",
                 )
             else:
@@ -436,9 +429,7 @@ class ToTExpansionStrategy(BaseExpansionStrategy):
         self.breadth_limit = breadth_limit
         self.eval_prompt_template = eval_prompt_template
         if eval_prompt_template:
-            validate_template(
-                eval_prompt_template, f"{type(self).__name__}.eval_prompt_template"
-            )
+            validate_template(eval_prompt_template, f"{type(self).__name__}.eval_prompt_template")
         self.max_tokens_thought_gen = max_tokens_thought_gen
         self.min_steps = min_steps
         self.thought_response_format: dict[str, Any] = (

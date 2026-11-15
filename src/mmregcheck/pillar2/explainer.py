@@ -25,7 +25,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from mmregcheck.pillar2.base import BaseExplanationStrategy
-from mmregcheck.pillar2.expansion import _create_completion, _with_reasoning
+from mmregcheck.pillar2.expansion._common import _create_completion, _with_reasoning
 from mmregcheck.pillar2.pipeline_state import TFBearState
 from mmregcheck.schemas import TechniqueVerdictItem, TFBearBranchTrace, aggregate_strict_hierarchy
 

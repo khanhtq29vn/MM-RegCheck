@@ -13,12 +13,12 @@ from typing import Any
 
 import pytest
 
-from mmregcheck.pillar2.pipeline_state import TFBearState
-from mmregcheck.pillar2.tot import (
+from mmregcheck.pillar2.expansion.tot import (
     TOT_STRATEGY,
     ExpansionParseError,
     ToTExpansionStrategy,
 )
+from mmregcheck.pillar2.pipeline_state import TFBearState
 
 
 @dataclass
@@ -203,7 +203,7 @@ def test_retry_budget_is_bounded_and_raises_when_exhausted(
 
     client = FakeClient(_always_fails)
     strategy = _tot(n_steps=1, k=1, max_retry=2)
-    monkeypatch.setattr("mmregcheck.pillar2.expansion.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("mmregcheck.pillar2.expansion._common.time.sleep", lambda _seconds: None)
 
     with pytest.raises(RuntimeError, match="failed after 2 attempts"):
         strategy.expand(_state(), client, "fake-model")

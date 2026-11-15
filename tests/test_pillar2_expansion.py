@@ -161,7 +161,7 @@ def test_retry_budget_is_bounded_and_raises_when_exhausted(
 
     client = FakeClient(_always_fails)
     strategy = StandardExpansionStrategy(prompt_template="{text_claim}", max_retry=2)
-    monkeypatch.setattr("mmregcheck.pillar2.expansion.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("mmregcheck.pillar2.expansion._common.time.sleep", lambda _seconds: None)
 
     with pytest.raises(RuntimeError, match="failed after 2 attempts"):
         strategy.expand(_state(), client, "fake-model")
@@ -180,7 +180,7 @@ def test_retry_recovers_within_budget(monkeypatch: pytest.MonkeyPatch) -> None:
 
     client = FakeClient(_flaky)
     strategy = CoTSCExpansionStrategy(n_paths=1, prompt_template="{text_claim}", max_retry=3)
-    monkeypatch.setattr("mmregcheck.pillar2.expansion.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("mmregcheck.pillar2.expansion._common.time.sleep", lambda _seconds: None)
 
     nodes = strategy.expand(_state(), client, "fake-model")
 
