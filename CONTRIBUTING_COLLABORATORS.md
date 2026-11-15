@@ -16,7 +16,7 @@ All core data contracts are locked in `src/mmregcheck/schemas.py`. When pushing 
 
 2. **`src/mmregcheck/pillar2/` (Pillar 2: Evidence Adjudicator via `TF-BEAR` — Section 4.2)**
    - `tf_bear.py`: The mathematical log-odds filter $\Delta = L(P_{\text{posterior}}) - L(P_{\text{prior}})$ and dual-threshold gate ($P_{\text{posterior}} \ge \tau_p, \Delta \ge \tau_\Delta$) are already implemented and tested in `TFBearAdjudicator`. Plug in your VLM `logprobs` elicitation and trajectory expansion (`R1: Strict`, `R2: Permissive`, `R3: Partial`) there.
-   - `explainer.py`: Implement `ExplanationSynthesizer.synthesize(...)` for `FIDES`-compliant legal rationale generation.
+   - `explainer.py`: `synthesize_overall_explanation(items)` aggregates technique-level verdicts into the overall `FIDES`-compliant rationale. The generative explanation strategies (`GenerativeExplanationStrategy` and `StructuredGenerativeExplanationStrategy`) plug into Stage 5 of the TF-BEAR engine (`config.py` / `engine.py`).
 
 ---
 
