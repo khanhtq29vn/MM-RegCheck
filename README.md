@@ -35,7 +35,7 @@ git clone https://github.com/khanhtq29vn/MM-RegCheck.git
 cd MM-RegCheck
 uv sync --all-extras
 
-# 2. Run the interactive Section 5.4 TF-BEAR Case Study (Figure 3 in paper)
+# 2. Run the interactive TF-BEAR case study on a worked claim
 uv run mmregcheck demo-tfbear
 
 # 3. Validate a model submission JSONL file for the MedReg-MM Leaderboard
@@ -74,7 +74,7 @@ with `mmregcheck validate-submission`. Pass `--api-key-env NAME` to read the key
 environment variable other than `OPENAI_API_KEY`. The pipeline is text-only in this release:
 `image_rel_path` is accepted but ignored.
 
-For batch runs and the open-book / close-book comparison used in the paper, use the script:
+For batch runs and the open-book / close-book comparison, use the script:
 
 ```bash
 uv run python scripts/run_tfbear_benchmark.py \
@@ -92,7 +92,7 @@ from mmregcheck.pillar2 import EndpointConfig, TFBear, TFBearConfig
 
 endpoint = EndpointConfig(base_url="...", api_key_env="OPENAI_API_KEY", model="...")
 
-# Per-domain pack: the draft's prompts and expansion hyperparameters.
+# Per-domain pack: the domain's prompts and expansion hyperparameters.
 bear = TFBear.from_domain("Beauty", "standard", endpoint=endpoint)
 result = bear.run(
     text_claim="A spa advertises a TCA chemical peel.",
@@ -146,9 +146,8 @@ result.final_verdict, result.surviving_branches, result.pruned_branches, result.
 
 ### Per-domain prompt packs (`--domain` / `--expansion`)
 
-The draft's six per-domain prompt files are ported to
-`mmregcheck.pillar2.prompts` (`beauty.py`, `healthcare.py`). Select one from the CLI or the
-benchmark script:
+The per-domain prompts live in `mmregcheck.pillar2.prompts` (`beauty.py`, `healthcare.py`), one
+pack per domain and expansion variant. Select one from the CLI or the benchmark script:
 
 ```bash
 # One domain, one expansion variant
@@ -183,7 +182,7 @@ bear = TFBear(pack.to_config(endpoint=endpoint))
 ```
 
 `PromptPack` is frozen and validates every template at import time. `pack.expansion_kwargs()`
-exposes the draft's hyperparameters (path count, temperatures, ToT search width) for callers
+exposes the pack's hyperparameters (path count, temperatures, ToT search width) for callers
 that build strategies themselves.
 
 ### Custom strategies

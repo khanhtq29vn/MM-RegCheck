@@ -10,13 +10,13 @@ This repository uses a **Contract-First Modular Architecture** so that refactori
 
 All core data contracts are locked in `src/mmregcheck/schemas.py`. When pushing refactored experimental code, place your modules in these two directories:
 
-1. **`src/mmregcheck/pillar1/` (Pillar 1: Visual-Regulatory Projector — Section 4.1)**
+1. **`src/mmregcheck/pillar1/` (Pillar 1: Visual-Regulatory Projector)**
    - `extractor.py`: Implement `VisualRegulatoryExtractor.extract(sample)` to extract `BusinessMetadata` and canonical clinical techniques $E_T = \{t_1, \dots, t_n\}$ guided by the Medical Glossary.
    - `retriever.py`: Implement `StatutoryHybridRetriever.retrieve(techniques, business_info)` for BM25 + Dense Top-$K$ statutory grounding $\hat{C}$.
 
-2. **`src/mmregcheck/pillar2/` (Pillar 2: Evidence Adjudicator via `TF-BEAR` — Section 4.2)**
+2. **`src/mmregcheck/pillar2/` (Pillar 2: Evidence Adjudicator via `TF-BEAR`)**
    - `tf_bear.py`: The public entry point. `TFBear(config, clients=...)` runs one claim (`run`) or one benchmark sample (`run_sample`, with `open_book=False` for the close-book condition), and `TFBear.from_domain(domain, expansion, ...)` builds the pipeline from a per-domain prompt pack. This module is orchestration only and also re-exports the legacy `TFBearAdjudicator`, `TFBearAdjudicationResult`, `TFBearConfig`, `TFBearResult` and `run_tfbear` names.
-   - `adjudication.py`: `TFBearAdjudicator` implements and tests the mathematical log-odds filter $\Delta = L(P_{\text{posterior}}) - L(P_{\text{prior}})$, the dual-threshold gate ($P_{\text{posterior}} \ge \tau_p, \Delta \ge \tau_\Delta$), the majority vote, the summed-posterior tie-break and the Appendix H fallback. `summed_posterior_tally` is the one posterior aggregation shared by the adjudicator and the strategies.
+   - `adjudication.py`: `TFBearAdjudicator` implements and tests the mathematical log-odds filter $\Delta = L(P_{\text{posterior}}) - L(P_{\text{prior}})$, the dual-threshold gate ($P_{\text{posterior}} \ge \tau_p, \Delta \ge \tau_\Delta$), the majority vote, the summed-posterior tie-break and the summed-posterior fallback. `summed_posterior_tally` is the one posterior aggregation shared by the adjudicator and the strategies.
    - `prior.py`, `expansion/` (`standard`, `cot-sc`, `tot`), `scoring.py`: Stages 1–3. The VLM `logprobs` elicitation they share lives in `llm/logprobs.py`; trajectory expansion (`R1: Strict`, `R2: Permissive`, `R3: Partial`) is a strategy you can replace.
    - `explainer.py`: Stage 5. `synthesize_overall_explanation(items)` aggregates technique-level verdicts into the overall `FIDES`-compliant rationale. The generative explanation strategies (`GenerativeExplanationStrategy` and `StructuredGenerativeExplanationStrategy`) plug into the engine here.
    - `base.py`, `config.py`, `pipeline_state.py`, `results.py`, `engine.py`: The `Base*Strategy` contracts, the strategy/endpoint wiring (`TFBearConfig`, including per-stage `stage_endpoints`), the shared `TFBearState`/`Node`, the result and usage dataclasses, and the stage orchestration. Subclass a `Base*Strategy` and pass it to `TFBearConfig` to replace a stage.
