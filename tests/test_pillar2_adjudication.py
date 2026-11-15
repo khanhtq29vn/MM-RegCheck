@@ -153,14 +153,14 @@ def test_majority_vote_fallback_matches_the_default_and_reports_the_tally() -> N
     ]
     state = TFBearState(branches=branches)
 
-    draft_result = MajorityVoteAdjudicationStrategy().adjudicate(
+    majority_result = MajorityVoteAdjudicationStrategy().adjudicate(
         state, _Client(_Completions({})), "m"
     )
     default_result = TFBearAdjudicator().adjudicate_branches(branches)
 
-    assert draft_result.used_fallback is True
-    assert draft_result.surviving_branches == []
-    assert draft_result.final_verdict == NON
+    assert majority_result.used_fallback is True
+    assert majority_result.surviving_branches == []
+    assert majority_result.final_verdict == NON
     assert default_result.final_verdict == NON
     assert state.p_posterior[NON] == pytest.approx(0.5)
 
