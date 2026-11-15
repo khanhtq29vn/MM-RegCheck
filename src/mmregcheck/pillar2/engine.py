@@ -16,7 +16,7 @@ from typing import Any
 from mmregcheck.pillar2.clients import ChatClient, ChatCompletions, ChatResource, build_client
 from mmregcheck.pillar2.config import TFBearConfig
 from mmregcheck.pillar2.pipeline_state import TFBearState
-from mmregcheck.schemas import ComplianceVerdict
+from mmregcheck.pillar2.results import StageUsage, TFBearResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,26 +48,6 @@ class StageClients:
             adjudication=stage,
             explanation=stage,
         )
-
-
-@dataclass(frozen=True, slots=True)
-class StageUsage:
-    """Latency and token usage of one stage."""
-
-    latency_seconds: float
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
-
-
-@dataclass(frozen=True, slots=True)
-class TFBearResult:
-    """Outcome of one TF-BEAR run."""
-
-    state: TFBearState
-    verdict: ComplianceVerdict
-    explanation: str
-    usage: dict[str, StageUsage]
 
 
 def _usage_payload(response: Any) -> Mapping[str, Any]:
