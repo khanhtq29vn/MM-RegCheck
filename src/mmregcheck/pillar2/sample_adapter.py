@@ -10,8 +10,8 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
-from mmregcheck.pillar2.engine import TFBearResult
 from mmregcheck.pillar2.pipeline_state import TFBearState
+from mmregcheck.pillar2.results import TFBearResult
 from mmregcheck.schemas import MedRegSampleInput, SubmissionPrediction
 
 #: Deterministic explanation used when the pipeline produced nothing usable; it must satisfy

@@ -1,12 +1,16 @@
-"""Adjudication strategies of the TF-BEAR pipeline (Section 4.2, Stage 4).
+"""Adjudication of the TF-BEAR pipeline (Section 4.2, Stage 4).
 
-The built-in `TFBearAdjudicationStrategy` delegates to `TFBearAdjudicator`, which is the
-authoritative implementation of the dual-threshold gate and the fallback vote. The two extra
-strategies port the draft's `selection.py` behaviour onto `TFBearBranchTrace`; both are opt-in
-because they differ from the paper's adjudicator:
+`TFBearAdjudicator` is the authoritative math: the dual-threshold gate, the majority vote, the
+summed-posterior tie-break and the Appendix H fallback. `summed_posterior_tally` is the one
+posterior aggregation every strategy shares.
 
-    MajorityVoteAdjudicationStrategy  draft fallback: argmax of the summed posterior over *all*
-                                      labels when no branch passes the gate
+The strategies wire that math into the pipeline. `TFBearAdjudicationStrategy` is the default and
+calls the adjudicator directly; the two extra strategies port the draft's `selection.py`
+behaviour onto `TFBearBranchTrace` and are opt-in because they report more than the paper's
+adjudicator:
+
+    MajorityVoteAdjudicationStrategy  same gate/vote/fallback, plus the normalised summed
+                                      posterior in `state.p_posterior`
     JointAdjudicationStrategy         one joint logprob call over every qualifying path
 """
 
@@ -15,25 +19,20 @@ from __future__ import annotations
 from collections import Counter
 
 from mmregcheck.pillar2.base import BaseAdjudicationStrategy
-from mmregcheck.pillar2.clients import ChatClient
-from mmregcheck.pillar2.logprobs import label_distribution
+from mmregcheck.pillar2.llm import ChatClient, label_distribution
 from mmregcheck.pillar2.pipeline_state import TFBearState
-from mmregcheck.pillar2.tf_bear import TFBearAdjudicationResult, TFBearAdjudicator
+from mmregcheck.pillar2.results import TFBearAdjudicationResult
 from mmregcheck.schemas import ComplianceVerdict, TFBearBranchTrace
 
 
-def _validate_thresholds(tau_posterior: float, tau_delta: float) -> None:
-    if not 0.0 <= tau_posterior <= 1.0:
-        raise ValueError(f"tau_posterior must be in [0, 1], got {tau_posterior}.")
-    if not tau_delta >= 0.0:
-        raise ValueError(f"tau_delta must be non-negative, got {tau_delta}.")
+def summed_posterior_tally(
+    branches: list[TFBearBranchTrace],
+) -> dict[ComplianceVerdict, float]:
+    """Sum each label's posterior over every branch.
 
-
-def _summed_posterior(branches: list[TFBearBranchTrace]) -> dict[ComplianceVerdict, float]:
-    """Sum every label's posterior over all branches.
-
-    A branch without a full distribution contributes the posterior of its own verdict, matching
-    `TFBearAdjudicator`.
+    A branch without a full distribution contributes only the posterior of its own verdict. This
+    is the shared aggregation of the adjudicator's tie-break and fallback and of the
+    majority-vote strategy's reported distribution.
     """
     tally = dict.fromkeys(ComplianceVerdict, 0.0)
     for branch in branches:
@@ -43,6 +42,60 @@ def _summed_posterior(branches: list[TFBearBranchTrace]) -> dict[ComplianceVerdi
             for verdict, probability in branch.posterior_distribution.items():
                 tally[verdict] += probability
     return tally
+
+
+class TFBearAdjudicator:
+    """Executes TF-BEAR dual-threshold log-odds filtering and majority voting."""
+
+    def __init__(self, tau_posterior: float = 0.50, tau_delta: float = 0.50) -> None:
+        self.tau_posterior = tau_posterior
+        self.tau_delta = tau_delta
+
+    def adjudicate_branches(
+        self,
+        branches: list[TFBearBranchTrace],
+    ) -> TFBearAdjudicationResult:
+        """Prune hallucinated branches failing the dual-threshold gate and vote."""
+        if not branches:
+            raise ValueError("TFBearAdjudicator requires at least one reasoning branch.")
+
+        surviving: list[TFBearBranchTrace] = []
+        pruned: list[TFBearBranchTrace] = []
+
+        for branch in branches:
+            if branch.passes_dual_threshold_gate(
+                tau_posterior=self.tau_posterior,
+                tau_delta=self.tau_delta,
+            ):
+                surviving.append(branch)
+            else:
+                pruned.append(branch)
+
+        active_pool = surviving if surviving else branches
+        vote_counts = Counter(b.predicted_verdict for b in active_pool)
+        posterior_tally = summed_posterior_tally(branches)
+
+        if surviving:
+            # Majority vote; ties resolved by the summed posterior over *all* branches.
+            winner = max(vote_counts, key=lambda v: (vote_counts[v], posterior_tally[v]))
+        else:
+            # No branch passed the causal filter: pick the label with the highest
+            # summed posterior across all generated branches (Appendix H fallback).
+            winner = max(ComplianceVerdict, key=lambda v: posterior_tally[v])
+
+        return TFBearAdjudicationResult(
+            final_verdict=winner,
+            surviving_branches=surviving,
+            pruned_branches=pruned,
+            used_fallback=not surviving,
+        )
+
+
+def _validate_thresholds(tau_posterior: float, tau_delta: float) -> None:
+    if not 0.0 <= tau_posterior <= 1.0:
+        raise ValueError(f"tau_posterior must be in [0, 1], got {tau_posterior}.")
+    if not tau_delta >= 0.0:
+        raise ValueError(f"tau_delta must be non-negative, got {tau_delta}.")
 
 
 class TFBearAdjudicationStrategy(BaseAdjudicationStrategy):
@@ -81,16 +134,12 @@ class TFBearAdjudicationStrategy(BaseAdjudicationStrategy):
 
 
 class MajorityVoteAdjudicationStrategy(BaseAdjudicationStrategy):
-    """Draft majority vote, kept for comparability with the reference implementation.
+    """Draft majority vote: `TFBearAdjudicator` plus the reported aggregate posterior.
 
-    Branches passing the dual-threshold gate each cast a vote for their predicted verdict; the
-    label with most votes wins, ties broken by the summed posterior. When no branch passes, the
-    draft ignores branch predictions and picks the label with the highest summed posterior over
-    all labels. The normalised tally is written to `state.p_posterior`, as in the draft.
-
-    The gate, vote and fallback now coincide with `TFBearAdjudicator`; the difference is that
-    this strategy also reports the aggregate posterior, which the draft's evaluation scripts
-    read. Use it when reproducing those numbers.
+    The gate, vote, tie-break and fallback are exactly `TFBearAdjudicator`'s, so this strategy
+    delegates to it instead of duplicating the math. Its only extra work is writing the
+    normalised `summed_posterior_tally` to `state.p_posterior`, which the draft's evaluation
+    scripts read. Use it when reproducing those numbers.
     """
 
     def __init__(
@@ -116,16 +165,7 @@ class MajorityVoteAdjudicationStrategy(BaseAdjudicationStrategy):
         if not state.branches:
             raise ValueError(f"{type(self).__name__}: state.branches is empty.")
 
-        surviving = [
-            branch
-            for branch in state.branches
-            if branch.passes_dual_threshold_gate(
-                tau_posterior=self.tau_posterior,
-                tau_delta=self.tau_delta,
-            )
-        ]
-        pruned = [branch for branch in state.branches if branch not in surviving]
-        posterior = _summed_posterior(state.branches)
+        posterior = summed_posterior_tally(state.branches)
         total = sum(posterior.values())
         state.p_posterior = (
             {verdict: probability / total for verdict, probability in posterior.items()}
@@ -133,26 +173,10 @@ class MajorityVoteAdjudicationStrategy(BaseAdjudicationStrategy):
             else posterior
         )
 
-        vote_counts = Counter(branch.predicted_verdict for branch in surviving)
-        if vote_counts:
-            winner = max(
-                vote_counts,
-                key=lambda verdict: (vote_counts[verdict], posterior[verdict]),
-            )
-            return TFBearAdjudicationResult(
-                final_verdict=winner,
-                surviving_branches=surviving,
-                pruned_branches=pruned,
-                used_fallback=False,
-            )
-
-        winner = max(ComplianceVerdict, key=lambda verdict: posterior[verdict])
-        return TFBearAdjudicationResult(
-            final_verdict=winner,
-            surviving_branches=[],
-            pruned_branches=list(state.branches),
-            used_fallback=True,
-        )
+        return TFBearAdjudicator(
+            tau_posterior=self.tau_posterior,
+            tau_delta=self.tau_delta,
+        ).adjudicate_branches(state.branches)
 
 
 class JointAdjudicationStrategy(BaseAdjudicationStrategy):

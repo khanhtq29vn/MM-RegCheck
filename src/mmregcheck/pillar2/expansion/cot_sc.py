@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from mmregcheck.pillar2.base import BaseExpansionStrategy
-from mmregcheck.pillar2.expansion._common import _create_completion, _sampled_texts
+from mmregcheck.pillar2.expansion._common import sampled_texts
+from mmregcheck.pillar2.llm import create_completion
 from mmregcheck.pillar2.pipeline_state import Node, TFBearState
 
 #: Value of `Node.meta["strategy"]`.
@@ -44,7 +45,7 @@ class CoTSCExpansionStrategy(BaseExpansionStrategy):
         self.logger.log_info(f"Prompt:\n{prompt}", style="dim")
         messages = [{"role": "user", "content": prompt}]
 
-        response = _create_completion(
+        response = create_completion(
             client,
             model=model,
             messages=messages,
@@ -59,7 +60,7 @@ class CoTSCExpansionStrategy(BaseExpansionStrategy):
         )
 
         nodes: list[Node] = []
-        for choice_index, text in _sampled_texts(response):
+        for choice_index, text in sampled_texts(response):
             nodes.append(
                 Node(
                     state=text,

@@ -21,7 +21,7 @@ from typing import Any
 
 from mmregcheck.pillar2.logger import TFBearLogger
 from mmregcheck.pillar2.pipeline_state import Node, TFBearState, validate_template
-from mmregcheck.pillar2.tf_bear import TFBearAdjudicationResult
+from mmregcheck.pillar2.results import TFBearAdjudicationResult
 from mmregcheck.schemas import ComplianceVerdict, TFBearBranchTrace
 
 

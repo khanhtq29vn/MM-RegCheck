@@ -11,8 +11,7 @@ must not reference the regulatory context.
 from __future__ import annotations
 
 from mmregcheck.pillar2.base import BasePriorStrategy
-from mmregcheck.pillar2.clients import ChatClient
-from mmregcheck.pillar2.logprobs import label_distribution
+from mmregcheck.pillar2.llm import ChatClient, label_distribution
 from mmregcheck.pillar2.pipeline_state import TFBearState
 from mmregcheck.schemas import ComplianceVerdict
 

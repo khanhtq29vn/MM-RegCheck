@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from mmregcheck.pillar2.clients import EndpointConfig, build_client
+from mmregcheck.pillar2.llm import EndpointConfig, build_client
 
 BASE_URL = "https://endpoint.invalid/v1"
 KEY_ENV = "MMREG_TEST_API_KEY"

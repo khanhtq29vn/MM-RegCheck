@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from mmregcheck.pillar2 import logprobs
-from mmregcheck.pillar2.logprobs import (
+from mmregcheck.pillar2.llm import logprobs
+from mmregcheck.pillar2.llm.logprobs import (
     TOKEN_TO_VERDICT,
     LabelTokenMissingError,
     LogprobElicitationError,

@@ -22,7 +22,7 @@ from collections.abc import Callable
 from typing import Any
 
 from mmregcheck.pillar2.base import BaseExpansionStrategy
-from mmregcheck.pillar2.expansion._common import _create_completion
+from mmregcheck.pillar2.llm import create_completion
 from mmregcheck.pillar2.logger import TFBearLogger
 from mmregcheck.pillar2.pipeline_state import Node, TFBearState, validate_template
 
@@ -204,7 +204,7 @@ class TreeOfThoughts:
 
     def _chat(self, prompt: str, *, n: int, **kwargs: Any) -> list[str]:
         """Call the model once and return the raw completion strings."""
-        response = _create_completion(
+        response = create_completion(
             self.client,
             model=self.model,
             messages=[{"role": "user", "content": prompt}],

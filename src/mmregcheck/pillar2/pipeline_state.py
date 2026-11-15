@@ -18,7 +18,7 @@ import string
 from dataclasses import dataclass, field
 from typing import Any
 
-from mmregcheck.pillar2.tf_bear import TFBearAdjudicationResult
+from mmregcheck.pillar2.results import TFBearAdjudicationResult
 from mmregcheck.schemas import ComplianceVerdict, TFBearBranchTrace
 
 # Placeholders a prompt template may reference. `paths`, `state` and `n_paths` are injected by the

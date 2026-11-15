@@ -22,7 +22,6 @@ from mmregcheck.pillar2.base import (
     BasePriorStrategy,
     BaseScoringStrategy,
 )
-from mmregcheck.pillar2.clients import EndpointConfig
 from mmregcheck.pillar2.config import TFBearConfig
 from mmregcheck.pillar2.expansion import (
     CoTSCExpansionStrategy,
@@ -30,6 +29,7 @@ from mmregcheck.pillar2.expansion import (
     ToTExpansionStrategy,
 )
 from mmregcheck.pillar2.explainer import GenerativeExplanationStrategy
+from mmregcheck.pillar2.llm import EndpointConfig
 from mmregcheck.pillar2.pipeline_state import validate_template
 from mmregcheck.pillar2.prior import LogprobPriorStrategy
 from mmregcheck.pillar2.scoring import CausalDeltaScoringStrategy
