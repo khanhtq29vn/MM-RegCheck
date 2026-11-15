@@ -1,4 +1,4 @@
-"""Reasoning-path expansion strategies of the TF-BEAR pipeline (Section 4.2).
+"""Reasoning-path expansion strategies of the TF-BEAR pipeline.
 
     Standard     one direct reasoning path per sampled completion (zero-shot baseline)
     CoT-SC       `n_paths` sampled chain-of-thought paths, aggregated by self-consistency

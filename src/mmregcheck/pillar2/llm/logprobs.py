@@ -1,12 +1,13 @@
 """Elicitation of the three-way compliance distribution from label-token logprobs.
 
-Appendix H constrains the model answer to a single digit `y_t in {0, 1, 2}`. One chat call
-with `max_tokens=1` and logprobs therefore yields a distribution over the three
+The model answer is constrained to a single digit `y_t in {0, 1, 2}`. One chat call with
+`max_tokens=LABEL_TOKEN_MAX_TOKENS` and logprobs therefore yields a distribution over the three
 `ComplianceVerdict` members directly, without parsing free text.
 
-The draft duplicates this logic in `strategies/prior.py`, `strategies/scoring.py` and
-`strategies/utils.py`; this module is the single implementation both stages use, so the prior
-and the posterior are elicited identically.
+This module is the single implementation the prior and scoring stages share, so the prior and
+the posterior are elicited with exactly the same procedure and remain comparable. Sampling is
+caller-controlled: `temperature`, `top_p` and `top_logprobs` are arguments whose defaults are the
+documented elicitation settings.
 """
 
 from __future__ import annotations
@@ -16,13 +17,17 @@ import time
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from mmregcheck.pillar2.diagnostics import record_diagnostic
 from mmregcheck.pillar2.llm.clients import ChatClient, ChoiceLogprobs
 from mmregcheck.schemas import ComplianceVerdict
 
-# Draft benchmark mapping (e.g. `examples/beauty/beauty_tot.py`): the digit the model emits
-# maps onto the schema's verdict values in this order. The library defaults of the draft
-# ("Refuted"/"Not Enough Info"/"Supported") do not name `ComplianceVerdict` members and are
-# deliberately not carried over.
+#: The label-token protocol emits exactly one token per call. The value is part of the protocol,
+#: not a sampling budget, so it is deliberately not caller-configurable.
+LABEL_TOKEN_MAX_TOKENS = 1
+
+# Benchmark label mapping: the digit the model emits maps onto the schema's verdict values in
+# this order. Generic label sets such as "Refuted"/"Not Enough Info"/"Supported" do not name
+# `ComplianceVerdict` members and are deliberately not used.
 TOKEN_TO_VERDICT: dict[str, ComplianceVerdict] = {
     "0": ComplianceVerdict.NON_COMPLIANT,
     "1": ComplianceVerdict.PARTLY_COMPLIANT,
@@ -41,9 +46,8 @@ class MissingLogprobsError(LogprobElicitationError):
 class LabelTokenMissingError(LogprobElicitationError):
     """Raised when none of the label tokens appears in the returned top logprobs.
 
-    The draft would keep whatever token survived (and renormalise a single remaining label to
-    1.0). When no label is present there is nothing to renormalise, so a distribution would
-    have to be invented; this error prevents a fabricated Delta downstream.
+    When no label is present there is nothing to renormalise, so a distribution would have to be
+    invented; this error prevents a fabricated Delta downstream.
     """
 
 
@@ -68,9 +72,9 @@ def _restricted_softmax(
 ) -> dict[ComplianceVerdict, float]:
     """Softmax over the label tokens that the endpoint returned.
 
-    Draft semantics are kept on purpose: a label outside the top-K candidates gets
-    probability 0.0 and the present labels are renormalised, so the result is always a proper
-    softmax over what the model actually emitted. Tokens may carry a leading space.
+    A label outside the top-K candidates gets probability 0.0 and the present labels are
+    renormalised, so the result is always a proper softmax over what the model actually emitted.
+    Tokens may carry a leading space.
     """
     log_probs: dict[ComplianceVerdict, float | None] = {}
     for token, verdict in label_tokens.items():
@@ -97,30 +101,68 @@ def _restricted_softmax(
     return distribution
 
 
+def _report_absent_labels(
+    distribution: Mapping[ComplianceVerdict, float],
+    label_tokens: Mapping[str, ComplianceVerdict],
+    *,
+    top_logprobs: int,
+    diagnostics: list[str] | None,
+    stage: str,
+) -> None:
+    """Warn about label tokens that the top-K cut removed from the distribution."""
+    absent = [
+        f"{token!r} ({verdict.value})"
+        for token, verdict in label_tokens.items()
+        if distribution.get(verdict, 0.0) == 0.0
+    ]
+    if not absent:
+        return
+    record_diagnostic(
+        diagnostics,
+        f"{stage}: label token(s) {', '.join(absent)} absent from the returned "
+        f"top-{top_logprobs} candidates; assigned probability 0.0 and renormalised over the "
+        "remaining labels.",
+        stacklevel=3,
+    )
+
+
 def label_distribution(
     client: ChatClient,
     *,
     model: str,
     messages: Sequence[Mapping[str, Any]],
     max_retry: int = 3,
+    temperature: float = 0.0,
+    top_p: float = 0.95,
     top_logprobs: int = 5,
     label_tokens: Mapping[str, ComplianceVerdict] = TOKEN_TO_VERDICT,
+    diagnostics: list[str] | None = None,
+    stage: str = "label elicitation",
 ) -> dict[ComplianceVerdict, float]:
     """Ask for one label token and return its restricted-softmax distribution.
 
-    A single chat-completion call with `max_tokens=1` and logprobs is made per attempt.
-    Transport and endpoint failures are retried with the draft's exponential backoff, bounded
+    A single chat-completion call with `max_tokens=LABEL_TOKEN_MAX_TOKENS` and logprobs is made
+    per attempt. Transport and endpoint failures are retried with exponential backoff, bounded
     by `max_retry`. Deterministic failures (no logprobs, no label token in the candidates) are
-    raised immediately: the request is greedy, so repeating it cannot change the answer and
-    would only spend calls.
+    raised immediately: repeating a deterministic request cannot change the answer and would
+    only spend calls.
+
+    A label that is present in the return value with probability 0.0 was absent from the top-K
+    candidates. That condition is reported as a `TFBearWarning` and appended to `diagnostics`,
+    because the renormalisation changes the distribution.
 
     Args:
         client: Any OpenAI-compatible client exposing the `ChatClient` shape.
         model: Model identifier passed to the endpoint.
         messages: Chat messages of the prompt; the model must answer with one digit.
         max_retry: Maximum number of attempts; must be at least 1.
-        top_logprobs: Number of candidate tokens requested per position.
-        label_tokens: Token -> verdict mapping; defaults to the paper's digits.
+        temperature: Sampling temperature of the elicitation call; defaults to 0.0 (greedy).
+        top_p: Nucleus threshold of the elicitation call; defaults to 0.95.
+        top_logprobs: Number of candidate tokens requested per position; defaults to 5.
+        label_tokens: Token -> verdict mapping; defaults to the `0`/`1`/`2` digits of
+            `TOKEN_TO_VERDICT`.
+        diagnostics: Optional run-level collector that receives the absent-label message.
+        stage: Stage name used in the absent-label diagnostic.
 
     Returns:
         A mapping over all `ComplianceVerdict` members. Labels absent from the returned
@@ -141,15 +183,23 @@ def label_distribution(
             response = client.chat.completions.create(
                 model=model,
                 messages=list(messages),
-                max_tokens=1,
+                max_tokens=LABEL_TOKEN_MAX_TOKENS,
                 logprobs=True,
                 top_logprobs=top_logprobs,
-                temperature=0.0,
-                top_p=1.0,
+                temperature=temperature,
+                top_p=top_p,
             )
-            return _restricted_softmax(
+            distribution = _restricted_softmax(
                 _top_logprobs_by_token(response.choices[0].logprobs), label_tokens
             )
+            _report_absent_labels(
+                distribution,
+                label_tokens,
+                top_logprobs=top_logprobs,
+                diagnostics=diagnostics,
+                stage=stage,
+            )
+            return distribution
         except LogprobElicitationError:
             raise
         except Exception as exc:  # Retried below, then re-raised with attempt context.

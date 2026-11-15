@@ -128,6 +128,7 @@ def test_generative_happy_path_renders_state_and_returns_text(
     call = client.calls[0]
     assert call["model"] == "fake-model"
     assert call["temperature"] == 0.3
+    assert call["top_p"] == 0.95
     assert call["max_tokens"] == 1024
     assert "reasoning" not in call
     assert "extra_body" not in call
@@ -192,6 +193,7 @@ def test_structured_happy_path_returns_validated_json(
 
     call = client.calls[0]
     assert call["temperature"] == 0.0
+    assert call["top_p"] == 0.95
     assert call["max_tokens"] == 1024
     assert call["response_format"] == {
         "type": "json_schema",

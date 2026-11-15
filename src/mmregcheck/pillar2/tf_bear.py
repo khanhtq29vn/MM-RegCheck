@@ -1,4 +1,4 @@
-"""Public entry point of the TF-BEAR pipeline (Section 4.2).
+"""Public entry point of the TF-BEAR pipeline.
 
 The pipeline runs five stages over one claim and its retrieved regulatory context:
 
@@ -19,6 +19,7 @@ strategy contracts in `mmregcheck.pillar2.base`, the shared state in
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from mmregcheck.pillar2.adjudication import TFBearAdjudicator
@@ -67,6 +68,7 @@ class TFBear:
         expansion: ExpansionName = "standard",
         *,
         endpoint: EndpointConfig | None = None,
+        expansion_params: Mapping[str, Any] | None = None,
         **config_overrides: Any,
     ) -> TFBear:
         """Build a pipeline from one of the per-domain prompt packs.
@@ -75,14 +77,25 @@ class TFBear:
             domain: Benchmark domain, as an enum value or its case-insensitive name.
             expansion: One of `"standard"`, `"cot-sc"` or `"tot"`.
             endpoint: Default endpoint of every stage.
-            **config_overrides: Forwarded to `PromptPack.to_config` (thresholds, verbosity,
-                retry budget, reasoning payload, per-stage endpoints, explanation budget).
+            expansion_params: Run-time parameters of the chosen expansion strategy, for example
+                `{"breadth_limit": 2}` for `"tot"` or `{"n_paths": 5}` for `"standard"`. A key
+                the strategy does not accept raises `ValueError`.
+            **config_overrides: Forwarded to `PromptPack.to_config`: thresholds, verbosity,
+                retry budget, reasoning payload, per-stage endpoints, explanation budget and the
+                shared/per-stage sampling settings.
 
         Raises:
-            ValueError: If the domain or the expansion variant is unknown.
+            ValueError: If the domain, the expansion variant or an expansion parameter is
+                unknown.
         """
         pack = load_prompt_pack(resolve_domain(domain), resolve_expansion(expansion))
-        return cls(pack.to_config(endpoint=endpoint, **config_overrides))
+        return cls(
+            pack.to_config(
+                endpoint=endpoint,
+                expansion_params=expansion_params,
+                **config_overrides,
+            )
+        )
 
     def run(self, text_claim: str, retrieved_regulatory_context: str = "") -> TFBearResult:
         """Run the five stages over one claim and its retrieved regulatory context."""
@@ -102,7 +115,8 @@ class TFBear:
         """Run one benchmark sample and return a leaderboard prediction.
 
         With `open_book=False` the sample's retrieved regulatory context is dropped before the
-        run, reproducing the paper's close-book condition.
+        run, which gives the close-book (evidence-free) condition: the pipeline must decide from
+        the claim alone.
         """
         state = state_from_sample(sample)
         if not open_book:

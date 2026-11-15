@@ -194,25 +194,29 @@ def test_pack_builds_the_matching_strategy_types(
         assert expansion_strategy.breadth_limit == 3
         assert expansion_strategy.min_steps == 2
         assert expansion_strategy.max_tokens_thought_gen == 1024
+        assert expansion_strategy.thought_temperature == 0.2
+        assert expansion_strategy.eval_temperature == 0.2
     else:
         assert expansion_strategy.n_paths == 3
-        assert expansion_strategy.temperature == 0.7
-        expected_max_tokens = 2000 if expansion == "cot-sc" else 512
-        assert expansion_strategy.max_tokens == expected_max_tokens
+        assert expansion_strategy.temperature == 0.2
+        assert expansion_strategy.top_p == 0.95
+        assert expansion_strategy.max_tokens == 1024
 
 
-def test_pack_expansion_kwargs_match_the_draft_configuration() -> None:
+def test_pack_expansion_kwargs_reflect_the_pack_fields() -> None:
     standard = load_prompt_pack(RegulatoryDomain.BEAUTY, "standard").expansion_kwargs()
     assert standard == {
         "prompt_template": load_prompt_pack(RegulatoryDomain.BEAUTY, "standard").expansion_prompt,
         "n_paths": 3,
-        "max_tokens": 512,
-        "temperature": 0.7,
+        "max_tokens": 1024,
+        "temperature": 0.2,
     }
 
     tot = load_prompt_pack(RegulatoryDomain.HEALTHCARE, "tot").expansion_kwargs()
     assert tot["n_steps"] == 3
     assert tot["k"] == 3
+    assert tot["max_tokens_thought_gen"] == 1024
+    assert tot["thought_temperature"] == 0.2
     assert (
         tot["eval_prompt_template"] == load_prompt_pack(RegulatoryDomain.HEALTHCARE, "tot").tot_eval
     )
@@ -240,7 +244,7 @@ def test_to_config_wires_the_pack_and_keeps_the_thresholds(
     assert config.adjudication_strategy.tau_posterior == 0.7
 
 
-def test_draft_label_mapping_is_preserved() -> None:
+def test_label_mapping_is_preserved() -> None:
     for domain in DOMAINS:
         for expansion in EXPANSIONS:
             pack = load_prompt_pack(domain, expansion)
@@ -278,3 +282,75 @@ def test_prompt_packs_contain_no_sample_data() -> None:
             for template in templates:
                 for marker in forbidden:
                     assert marker not in template
+
+
+def test_to_config_forwards_the_sampling_settings() -> None:
+    pack = load_prompt_pack(RegulatoryDomain.BEAUTY, "standard")
+    config = pack.to_config(
+        temperature=0.6,
+        top_p=0.7,
+        max_tokens=777,
+        elicitation_temperature=0.1,
+        elicitation_top_p=0.8,
+        top_logprobs=9,
+    )
+
+    expansion = config.expansion_strategy
+    assert isinstance(expansion, StandardExpansionStrategy)
+    assert (expansion.temperature, expansion.top_p, expansion.max_tokens) == (0.6, 0.7, 777)
+    assert config.prior_strategy.temperature == 0.1
+    assert config.prior_strategy.top_p == 0.8
+    assert config.prior_strategy.top_logprobs == 9
+    assert config.scoring_strategy.top_logprobs == 9
+
+
+def test_to_config_preserves_the_pack_explanation_budget() -> None:
+    pack = load_prompt_pack(RegulatoryDomain.BEAUTY, "standard")
+    config = pack.to_config(explanation_max_tokens=123)
+
+    assert config.explanation_strategy.max_tokens == 123
+
+
+def test_expansion_params_reach_the_standard_strategy() -> None:
+    pack = load_prompt_pack(RegulatoryDomain.BEAUTY, "standard")
+    config = pack.to_config(expansion_params={"n_paths": 5, "max_tokens": 321})
+
+    expansion = config.expansion_strategy
+    assert isinstance(expansion, StandardExpansionStrategy)
+    assert expansion.n_paths == 5
+    assert expansion.max_tokens == 321
+    # The config's shared sampling still applies to the other knobs.
+    assert expansion.temperature == 0.2
+
+
+def test_expansion_params_reach_the_tot_strategy() -> None:
+    pack = load_prompt_pack(RegulatoryDomain.HEALTHCARE, "tot")
+    config = pack.to_config(
+        expansion_params={"breadth_limit": 2, "eval_temperature": 0.9, "k": 4}
+    )
+
+    expansion = config.expansion_strategy
+    assert isinstance(expansion, ToTExpansionStrategy)
+    assert expansion.breadth_limit == 2
+    assert expansion.k == 4
+    assert expansion.eval_temperature == 0.9
+    assert expansion.thought_temperature == 0.2
+
+
+def test_unknown_expansion_param_raises_and_lists_the_accepted_keys() -> None:
+    pack = load_prompt_pack(RegulatoryDomain.BEAUTY, "standard")
+
+    with pytest.raises(ValueError, match="unknown key") as excinfo:
+        pack.to_config(expansion_params={"breadth_limit": 2})
+
+    message = str(excinfo.value)
+    assert "accepted keys" in message
+    assert "n_paths" in message
+    assert "temperature" in message
+
+
+def test_tot_rejects_a_standard_only_expansion_param() -> None:
+    pack = load_prompt_pack(RegulatoryDomain.BEAUTY, "tot")
+
+    with pytest.raises(ValueError, match="n_paths"):
+        pack.to_config(expansion_params={"n_paths": 3})

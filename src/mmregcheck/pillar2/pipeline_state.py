@@ -1,4 +1,4 @@
-"""Shared state of the TF-BEAR pipeline (Section 4.2).
+"""Shared state of the TF-BEAR pipeline.
 
 A single `TFBearState` accumulates the inputs and outputs of every stage. Strategies receive
 the whole object and must only read the fields their stage contract allows:
@@ -80,7 +80,19 @@ class Node:
 
 @dataclass
 class TFBearState:
-    """Inputs and per-stage outputs of one TF-BEAR run."""
+    """Inputs and per-stage outputs of one TF-BEAR run.
+
+    Attributes:
+        text_claim: Advertisement text classified by the run.
+        retrieved_regulatory_context: Evidence shown to the open-book stages.
+        p_prior: Stage 1 verdict distribution.
+        p_posterior: Optional aggregate posterior written by some adjudication strategies.
+        nodes: Reasoning paths produced by expansion.
+        branches: Traces produced by scoring.
+        adjudication: Final adjudication result.
+        diagnostics: Non-fatal conditions recorded during the run, copied into
+            `TFBearResult.diagnostics`. This record does not depend on `verbose`.
+    """
 
     text_claim: str = ""
     retrieved_regulatory_context: str = ""
@@ -89,6 +101,7 @@ class TFBearState:
     nodes: list[Node] = field(default_factory=list)
     branches: list[TFBearBranchTrace] = field(default_factory=list)
     adjudication: TFBearAdjudicationResult | None = None
+    diagnostics: list[str] = field(default_factory=list)
 
     @property
     def verdict(self) -> str:

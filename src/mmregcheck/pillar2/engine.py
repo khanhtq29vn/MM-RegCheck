@@ -1,9 +1,9 @@
-"""Orchestration of the five TF-BEAR stages (Section 4.2).
+"""Orchestration of the five TF-BEAR stages.
 
-Port of the draft `pipeline.py`: the engine runs prior, expansion, scoring, adjudication and
-explanation over one `TFBearState`, logs each stage, and records latency and token usage per
-stage. Unlike the draft it returns typed objects instead of a dict, and it resolves one
-OpenAI-compatible client per stage so multiple endpoints can be mixed.
+`run_tfbear` runs prior, expansion, scoring, adjudication and explanation over one
+`TFBearState`, logs each stage, and records latency and token usage per stage. It returns typed
+objects rather than a plain dict, and it resolves one OpenAI-compatible client per stage so
+multiple endpoints can be mixed in a single run.
 """
 
 from __future__ import annotations
@@ -213,4 +213,5 @@ def run_tfbear(
         verdict=state.adjudication.final_verdict,
         explanation=explanation,
         usage=usage,
+        diagnostics=list(state.diagnostics),
     )

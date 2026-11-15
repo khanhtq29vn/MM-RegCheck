@@ -1,4 +1,4 @@
-"""OpenAI-compatible client construction for the TF-BEAR stages (Section 4.2).
+"""OpenAI-compatible client construction for the TF-BEAR stages.
 
 The pipeline talks to any endpoint that implements the OpenAI chat-completions API; nothing
 here names a provider, a model or an API-key variable. A caller describes an endpoint with

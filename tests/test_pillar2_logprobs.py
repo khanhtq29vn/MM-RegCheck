@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import math
+import warnings
 from typing import Any
 
 import pytest
 
+from mmregcheck.pillar2.diagnostics import TFBearWarning
 from mmregcheck.pillar2.llm import logprobs
 from mmregcheck.pillar2.llm.logprobs import (
+    LABEL_TOKEN_MAX_TOKENS,
     TOKEN_TO_VERDICT,
     LabelTokenMissingError,
     LogprobElicitationError,
@@ -167,11 +170,60 @@ def test_request_is_greedy_single_token_and_asks_for_top_logprobs() -> None:
     call = completions.calls[0]
     assert call["model"] == "test-model"
     assert call["messages"] == PROMPT
-    assert call["max_tokens"] == 1
+    assert call["max_tokens"] == LABEL_TOKEN_MAX_TOKENS == 1
     assert call["logprobs"] is True
     assert call["top_logprobs"] == 5
     assert call["temperature"] == 0.0
-    assert call["top_p"] == 1.0
+    assert call["top_p"] == 0.95
+
+
+def test_sampling_settings_are_forwarded() -> None:
+    completions = _FakeCompletions([_response({"0": 0.0, "1": 0.0, "2": 0.0})])
+    label_distribution(
+        _FakeClient(completions),
+        model="test-model",
+        messages=PROMPT,
+        temperature=0.3,
+        top_p=0.6,
+        top_logprobs=12,
+    )
+
+    call = completions.calls[0]
+    assert call["temperature"] == 0.3
+    assert call["top_p"] == 0.6
+    assert call["top_logprobs"] == 12
+    assert call["max_tokens"] == 1
+
+
+def test_absent_label_is_warned_and_recorded_on_the_diagnostics() -> None:
+    client = _client(_response({"1": math.log(0.4), "X": math.log(0.6)}))
+    diagnostics: list[str] = []
+
+    with pytest.warns(TFBearWarning, match=r"absent from the returned top-5"):
+        distribution = label_distribution(
+            client,
+            model="m",
+            messages=PROMPT,
+            diagnostics=diagnostics,
+            stage="scoring",
+        )
+
+    assert distribution[ComplianceVerdict.PARTLY_COMPLIANT] == pytest.approx(1.0)
+    assert len(diagnostics) == 1
+    assert diagnostics[0].startswith("scoring:")
+    assert "'0' (Non-Compliant)" in diagnostics[0]
+    assert "'2' (Compliant)" in diagnostics[0]
+
+
+def test_all_labels_present_emit_no_warning() -> None:
+    client = _client(_response({"0": math.log(0.2), "1": math.log(0.5), "2": math.log(0.3)}))
+    diagnostics: list[str] = []
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", TFBearWarning)
+        label_distribution(client, model="m", messages=PROMPT, diagnostics=diagnostics)
+
+    assert diagnostics == []
 
 
 def test_transient_error_is_retried_within_max_retry(monkeypatch: pytest.MonkeyPatch) -> None:

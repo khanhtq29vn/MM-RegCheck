@@ -36,9 +36,12 @@ from mmregcheck.pillar2.expansion import (
     StandardExpansionStrategy,
     ToTExpansionStrategy,
 )
+from mmregcheck.pillar2.explainer import GenerativeExplanationStrategy
 from mmregcheck.pillar2.pipeline_state import Node, TFBearState
+from mmregcheck.pillar2.prior import LogprobPriorStrategy
 from mmregcheck.pillar2.prompts import EXPANSIONS, ExpansionName, load_prompt_pack
 from mmregcheck.pillar2.results import TFBearAdjudicationResult
+from mmregcheck.pillar2.scoring import CausalDeltaScoringStrategy
 from mmregcheck.schemas import (
     BusinessMetadata,
     ComplianceVerdict,
@@ -225,7 +228,21 @@ def _sample() -> MedRegSampleInput:
 
 def test_run_executes_the_five_stages_with_fake_clients() -> None:
     client = _PipelineClient()
-    bear = TFBear(TFBearConfig(), clients=StageClients.single(client, "test-model"))
+    config = TFBearConfig(
+        prior_strategy=LogprobPriorStrategy(prompt_template="Classify: {text_claim}"),
+        expansion_strategy=StandardExpansionStrategy(
+            n_paths=1,
+            prompt_template="{text_claim}|{retrieved_regulatory_context}",
+        ),
+        scoring_strategy=CausalDeltaScoringStrategy(
+            prompt_template=f"{_SCORING_MARKER} {{state}}\n{{text_claim}}"
+        ),
+        adjudication_strategy=TFBearAdjudicationStrategy(),
+        explanation_strategy=GenerativeExplanationStrategy(
+            prompt_template="Verdict: {verdict}\n{paths}"
+        ),
+    )
+    bear = TFBear(config, clients=StageClients.single(client, "test-model"))
 
     result = bear.run(
         "A spa advertises a TCA chemical peel.",
@@ -330,6 +347,41 @@ def test_tf_bear_reexports_the_legacy_names() -> None:
     assert tf_bear_module.TFBearConfig is TFBearConfig
     assert tf_bear_module.TFBearResult is TFBearResult
     assert tf_bear_module.run_tfbear is run_tfbear
+
+
+def test_from_domain_applies_expansion_params() -> None:
+    endpoint = pillar2.EndpointConfig(
+        base_url="https://endpoint.invalid/v1",
+        api_key_env="MMREG_TEST_API_KEY",
+        model="test-model",
+    )
+
+    bear = TFBear.from_domain(
+        "Beauty",
+        "tot",
+        endpoint=endpoint,
+        expansion_params={"breadth_limit": 2},
+    )
+
+    expansion = bear.config.expansion_strategy
+    assert isinstance(expansion, ToTExpansionStrategy)
+    assert expansion.breadth_limit == 2
+
+
+def test_from_domain_rejects_an_unknown_expansion_param() -> None:
+    endpoint = pillar2.EndpointConfig(
+        base_url="https://endpoint.invalid/v1",
+        api_key_env="MMREG_TEST_API_KEY",
+        model="test-model",
+    )
+
+    with pytest.raises(ValueError, match="accepted keys"):
+        TFBear.from_domain(
+            "Beauty",
+            "standard",
+            endpoint=endpoint,
+            expansion_params={"breadth_limit": 2},
+        )
 
 
 def test_importing_pillar2_does_not_import_the_optional_llm_dependencies() -> None:

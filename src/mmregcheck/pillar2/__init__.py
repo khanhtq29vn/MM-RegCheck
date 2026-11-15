@@ -1,4 +1,4 @@
-"""Pillar 2: Evidence Adjudicator via TF-BEAR (Section 4.2).
+"""Pillar 2: evidence-adjudicator pipeline built on TF-BEAR.
 
 `TFBear` is the public entry point of the pipeline; it is configured with `TFBearConfig` and
 runs over `TFBearState`, returning a `TFBearResult`. `EndpointConfig` describes an

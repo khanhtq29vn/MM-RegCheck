@@ -1,4 +1,4 @@
-"""Tests for the default and draft-derived adjudication strategies."""
+"""Tests for the default and alternative adjudication strategies."""
 
 from __future__ import annotations
 
@@ -134,7 +134,7 @@ def test_majority_vote_counts_gate_passing_branches() -> None:
 
 
 def test_majority_vote_fallback_matches_the_default_and_reports_the_tally() -> None:
-    """Both fallbacks pick the summed-posterior argmax; the draft variant reports the tally."""
+    """Both fallbacks pick the summed-posterior argmax; the majority-vote strategy reports it."""
     branches = [
         _branch(
             "P1",
@@ -153,14 +153,14 @@ def test_majority_vote_fallback_matches_the_default_and_reports_the_tally() -> N
     ]
     state = TFBearState(branches=branches)
 
-    draft_result = MajorityVoteAdjudicationStrategy().adjudicate(
+    majority_result = MajorityVoteAdjudicationStrategy().adjudicate(
         state, _Client(_Completions({})), "m"
     )
     default_result = TFBearAdjudicator().adjudicate_branches(branches)
 
-    assert draft_result.used_fallback is True
-    assert draft_result.surviving_branches == []
-    assert draft_result.final_verdict == NON
+    assert majority_result.used_fallback is True
+    assert majority_result.surviving_branches == []
+    assert majority_result.final_verdict == NON
     assert default_result.final_verdict == NON
     assert state.p_posterior[NON] == pytest.approx(0.5)
 
@@ -220,3 +220,76 @@ def test_delta_threshold_must_be_non_negative() -> None:
         TFBearAdjudicationStrategy(tau_delta=-0.1)
     with pytest.raises(ValueError, match="tau_delta"):
         MajorityVoteAdjudicationStrategy(tau_delta=-0.1)
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_vote_tie_resolves_to_non_compliant_regardless_of_branch_order(reverse: bool) -> None:
+    branches = [
+        _branch(
+            "P1",
+            NON,
+            0.3,
+            0.9,
+            {NON: 0.9, PARTLY: 0.05, COMPLIANT: 0.05},
+        ),
+        _branch(
+            "P2",
+            COMPLIANT,
+            0.3,
+            0.9,
+            {NON: 0.05, PARTLY: 0.05, COMPLIANT: 0.9},
+        ),
+    ]
+    if reverse:
+        branches.reverse()
+
+    result = TFBearAdjudicator().adjudicate_branches(branches)
+
+    assert result.used_fallback is False
+    assert result.final_verdict is NON
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_fallback_with_all_equal_summed_posteriors_is_non_compliant(reverse: bool) -> None:
+    distribution = {NON: 1 / 3, PARTLY: 1 / 3, COMPLIANT: 1 / 3}
+    branches = [
+        _branch("P1", NON, 0.9, 1 / 3, distribution),
+        _branch("P2", COMPLIANT, 0.9, 1 / 3, distribution),
+    ]
+    if reverse:
+        branches.reverse()
+
+    result = TFBearAdjudicator().adjudicate_branches(branches)
+
+    assert result.used_fallback is True
+    assert result.final_verdict is NON
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_all_equal_summed_posteriors_without_survivors_is_non_compliant(reverse: bool) -> None:
+    branches = [
+        _branch("P1", NON, 0.9, 0.4, {NON: 0.4, PARTLY: 0.3, COMPLIANT: 0.3}),
+        _branch("P2", PARTLY, 0.9, 0.4, {NON: 0.3, PARTLY: 0.4, COMPLIANT: 0.3}),
+        _branch("P3", COMPLIANT, 0.9, 0.4, {NON: 0.3, PARTLY: 0.3, COMPLIANT: 0.4}),
+    ]
+    if reverse:
+        branches.reverse()
+
+    result = TFBearAdjudicator().adjudicate_branches(branches)
+
+    assert result.used_fallback is True
+    assert result.final_verdict is NON
+
+
+def test_joint_all_equal_distribution_resolves_to_non_compliant() -> None:
+    branch = _branch("P1", NON, 0.3, 0.9)
+    state = TFBearState(text_claim="claim", branches=[branch])
+    strategy = JointAdjudicationStrategy(prompt_template="{paths}")
+
+    result = strategy.adjudicate(
+        state,
+        _Client(_Completions({"0": 1 / 3, "1": 1 / 3, "2": 1 / 3})),
+        "m",
+    )
+
+    assert result.final_verdict is NON
