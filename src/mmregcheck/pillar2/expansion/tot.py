@@ -183,6 +183,7 @@ class TreeOfThoughts:
         thought_response_format: dict[str, Any] | None = None,
         eval_response_format: dict[str, Any] | None = None,
         reasoning: dict[str, Any] | None = None,
+        extra_body: dict[str, Any] | None = None,
         diagnostics: list[str] | None = None,
         logger: TFBearLogger | None = None,
     ) -> None:
@@ -216,6 +217,7 @@ class TreeOfThoughts:
         self.thought_response_format = thought_response_format
         self.eval_response_format = eval_response_format
         self.reasoning: dict[str, Any] = reasoning if reasoning is not None else {"enabled": False}
+        self.extra_body: dict[str, Any] = dict(extra_body) if extra_body else {}
         self.diagnostics = diagnostics
         self.logger = logger if logger is not None else TFBearLogger(verbose=False)
 
@@ -243,6 +245,7 @@ class TreeOfThoughts:
             n=n,
             temperature=temperature,
             reasoning=self.reasoning,
+            extra_body=self.extra_body,
             **request,
             **kwargs,
         )
@@ -541,6 +544,7 @@ class ToTExpansionStrategy(BaseExpansionStrategy):
             thought_response_format=self.thought_response_format,
             eval_response_format=self.eval_response_format,
             reasoning=self.reasoning,
+            extra_body=self.extra_body,
             diagnostics=state.diagnostics,
             logger=self.logger,
         )

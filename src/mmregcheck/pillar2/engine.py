@@ -170,7 +170,7 @@ def run_tfbear(
     usage["prior"] = _snapshot(tracker, started)
 
     if config.verbose:
-        logger.log_stage(2, "Expanding reasoning paths", color="blue")
+        logger.log_stage(2, "Expanding reasoning paths", color="bright_blue")
     tracker = _TokenTracker(stage_clients.expansion.client)
     started = time.perf_counter()
     state.nodes = expansion.expand(state, tracker, stage_clients.expansion.model)
@@ -205,8 +205,6 @@ def run_tfbear(
     started = time.perf_counter()
     explanation = explanation_strategy.explain(state, tracker, stage_clients.explanation.model)
     usage["explanation"] = _snapshot(tracker, started)
-    if config.verbose:
-        logger.log_explanation(explanation)
 
     return TFBearResult(
         state=state,

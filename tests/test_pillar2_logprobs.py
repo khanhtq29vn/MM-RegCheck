@@ -252,3 +252,26 @@ def test_max_retry_must_be_positive() -> None:
 
     with pytest.raises(ValueError, match="max_retry"):
         label_distribution(client, model="m", messages=PROMPT, max_retry=0)
+
+
+def test_extra_body_is_forwarded_only_when_non_empty() -> None:
+    completions = _FakeCompletions(
+        [
+            _response({"0": 0.0, "1": 0.0, "2": 0.0}),
+            _response({"0": 0.0, "1": 0.0, "2": 0.0}),
+        ]
+    )
+    client = _FakeClient(completions)
+
+    label_distribution(client, model="m", messages=PROMPT, extra_body={})
+    label_distribution(
+        client,
+        model="m",
+        messages=PROMPT,
+        extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+    )
+
+    assert "extra_body" not in completions.calls[0]
+    assert completions.calls[1]["extra_body"] == {
+        "chat_template_kwargs": {"enable_thinking": False}
+    }

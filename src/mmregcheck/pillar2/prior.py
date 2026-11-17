@@ -78,6 +78,7 @@ class LogprobPriorStrategy(BasePriorStrategy):
             top_logprobs=self.top_logprobs,
             diagnostics=state.diagnostics,
             stage=type(self).__name__,
+            extra_body=self.extra_body,
         )
         if self.verbose:
             summary = ", ".join(

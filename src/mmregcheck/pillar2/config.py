@@ -80,6 +80,9 @@ class TFBearConfig:
         verbose: Enables stage and strategy logging. Propagated to every strategy.
         max_retry: Retry budget of the LLM calls. Propagated to every strategy.
         reasoning: Provider-specific reasoning payload. Propagated to every strategy.
+        extra_body: Provider-specific request-body fields (for example
+            `{"chat_template_kwargs": {"enable_thinking": False}}`). Propagated to every
+            strategy, including label-token elicitation.
     """
 
     prior_strategy: BasePriorStrategy
@@ -109,6 +112,7 @@ class TFBearConfig:
     verbose: bool = False
     max_retry: int = 3
     reasoning: dict[str, Any] = field(default_factory=lambda: {"enabled": False})
+    extra_body: dict[str, Any] = field(default_factory=dict)
 
     logger: TFBearLogger = field(init=False, repr=False)
 
@@ -128,6 +132,7 @@ class TFBearConfig:
             )
 
         self.reasoning = dict(self.reasoning)
+        self.extra_body = dict(self.extra_body)
         self._validate_strategy_types()
         self._apply_thresholds()
         self._apply_sampling_settings()
@@ -138,6 +143,7 @@ class TFBearConfig:
             strategy.logger = self.logger
             strategy.max_retry = self.max_retry
             strategy.reasoning = self.reasoning
+            strategy.extra_body = self.extra_body
 
     def _validate_sampling(self) -> None:
         for name, value in (

@@ -165,7 +165,7 @@ class GenerativeExplanationStrategy(BaseExplanationStrategy):
             paths=_supporting_paths(state),
             verdict=state.verdict,
         )
-        self.logger.log_info(f"Prompt (first 500 chars):\n{prompt[:500]}", style="dim")
+        self.logger.log_prompt(prompt[:500], title="Prompt (first 500 chars)")
 
         response = create_completion(
             client,
@@ -178,6 +178,7 @@ class GenerativeExplanationStrategy(BaseExplanationStrategy):
             max_tokens=self.max_tokens,
             top_p=self.top_p,
             reasoning=self.reasoning,
+            extra_body=self.extra_body,
         )
         if not response.choices:
             raise RuntimeError(f"{type(self).__name__}: the model returned no completion choice.")
@@ -248,7 +249,7 @@ class StructuredGenerativeExplanationStrategy(BaseExplanationStrategy):
             paths=_supporting_paths(state),
             verdict=state.verdict,
         )
-        self.logger.log_info(f"Prompt (first 500 chars):\n{prompt[:500]}", style="dim")
+        self.logger.log_prompt(prompt[:500], title="Prompt (first 500 chars)")
 
         response_format = {
             "type": "json_schema",
@@ -271,6 +272,7 @@ class StructuredGenerativeExplanationStrategy(BaseExplanationStrategy):
                             "max_tokens": self.max_tokens,
                             "top_p": self.top_p,
                             "reasoning": self.reasoning,
+                            "extra_body": self.extra_body,
                             "response_format": response_format,
                         }
                     ),

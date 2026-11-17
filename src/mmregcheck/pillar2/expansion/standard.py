@@ -63,7 +63,7 @@ class StandardExpansionStrategy(BaseExpansionStrategy):
             )
 
         prompt = state.render(self.prompt_template)
-        self.logger.log_info(f"Prompt:\n{prompt}", style="dim")
+        self.logger.log_prompt(prompt)
         messages = [{"role": "user", "content": prompt}]
 
         response = create_completion(
@@ -78,6 +78,7 @@ class StandardExpansionStrategy(BaseExpansionStrategy):
             max_tokens=self.max_tokens,
             top_p=self.top_p,
             reasoning=self.reasoning,
+            extra_body=self.extra_body,
         )
         record_truncated_completions(
             type(self).__name__,
@@ -96,7 +97,7 @@ class StandardExpansionStrategy(BaseExpansionStrategy):
                     meta={"strategy": STANDARD_STRATEGY, "choice_index": choice_index},
                 )
             )
-            self.logger.log_info(f"Standard path {choice_index + 1}: {text}", style="dim")
+            self.logger.log_response(text, title=f"Response (Standard path {choice_index + 1})")
 
         if not nodes:
             raise ValueError(f"{type(self).__name__}: the model returned no usable completion.")

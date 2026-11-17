@@ -34,11 +34,13 @@ class _BaseStrategy:
         verbose: bool = False,
         max_retry: int = 3,
         reasoning: dict[str, Any] | None = None,
+        extra_body: dict[str, Any] | None = None,
     ) -> None:
         self.prompt_template = prompt_template
         self.verbose = verbose
         self.max_retry = max_retry
         self.reasoning: dict[str, Any] = reasoning if reasoning is not None else {"enabled": False}
+        self.extra_body: dict[str, Any] = dict(extra_body) if extra_body else {}
         self.logger = TFBearLogger(verbose=verbose)
         if prompt_template:
             validate_template(prompt_template, type(self).__name__)

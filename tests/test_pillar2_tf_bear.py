@@ -419,3 +419,53 @@ def test_importing_pillar2_does_not_import_the_optional_llm_dependencies() -> No
     )
 
     assert completed.returncode == 0, completed.stderr
+
+
+def test_extra_body_propagates_to_all_pipeline_stages() -> None:
+    client = _PipelineClient()
+    extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
+    config = TFBearConfig(
+        prior_strategy=LogprobPriorStrategy(prompt_template="Classify: {text_claim}"),
+        expansion_strategy=StandardExpansionStrategy(
+            n_paths=1,
+            prompt_template="{text_claim}|{retrieved_regulatory_context}",
+        ),
+        scoring_strategy=CausalDeltaScoringStrategy(
+            prompt_template=f"{_SCORING_MARKER} {{state}}\n{{text_claim}}"
+        ),
+        adjudication_strategy=TFBearAdjudicationStrategy(),
+        explanation_strategy=GenerativeExplanationStrategy(
+            prompt_template="Verdict: {verdict}\n{paths}"
+        ),
+        extra_body=extra_body,
+    )
+
+    TFBear(config, clients=StageClients.single(client, "test-model")).run(
+        "A spa advertises a TCA chemical peel.",
+        "Basic Skincare Spa: non-invasive cleansing only.",
+    )
+
+    assert len(client.chat.completions.calls) == 4
+    for call in client.chat.completions.calls:
+        assert call["extra_body"] == extra_body
+
+
+def test_with_reasoning_merges_extra_body_and_omits_empty() -> None:
+    from mmregcheck.pillar2.llm import with_reasoning
+
+    assert with_reasoning(
+        {"temperature": 0.2, "reasoning": {"enabled": False}, "extra_body": {}}
+    ) == {"temperature": 0.2}
+    assert with_reasoning(
+        {
+            "temperature": 0.2,
+            "reasoning": {"enabled": True},
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+        }
+    ) == {
+        "temperature": 0.2,
+        "extra_body": {
+            "chat_template_kwargs": {"enable_thinking": False},
+            "reasoning": {"enabled": True},
+        },
+    }

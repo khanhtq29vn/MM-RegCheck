@@ -114,6 +114,7 @@ class CausalDeltaScoringStrategy(BaseScoringStrategy):
                 top_logprobs=self.top_logprobs,
                 diagnostics=state.diagnostics,
                 stage=type(self).__name__,
+                extra_body=self.extra_body,
             )
             predicted_verdict = select_verdict(distribution)
 

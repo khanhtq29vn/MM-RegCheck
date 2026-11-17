@@ -8,7 +8,7 @@ a run.
 
 `PromptPack.to_config` follows `mmregcheck.pillar2.config`: it builds the matching built-in
 strategies and lets `TFBearConfig` own endpoint selection, thresholds and the propagation of
-`verbose`/`max_retry`/`reasoning`. Expansion-specific parameters can be overridden at run time
+`verbose`/`max_retry`/`reasoning`/`extra_body`. Expansion-specific parameters can be overridden at run time
 through `expansion_params`; a key the chosen strategy does not accept raises `ValueError` instead
 of being ignored.
 """
@@ -261,6 +261,7 @@ class PromptPack:
         verbose: bool = False,
         max_retry: int = 3,
         reasoning: dict[str, Any] | None = None,
+        extra_body: Mapping[str, Any] | None = None,
         explanation_max_tokens: int = 256,
         temperature: float = 0.2,
         top_p: float = 0.95,
@@ -288,6 +289,7 @@ class PromptPack:
             verbose: Enables verbose stage logging.
             max_retry: Retry budget of the LLM calls.
             reasoning: Provider-specific reasoning payload.
+            extra_body: Extra fields merged into the OpenAI request extra_body.
             explanation_max_tokens: Token budget of the explanation call.
             temperature: Shared generation temperature; defaults to 0.2.
             top_p: Shared generation nucleus threshold; defaults to 0.95.
@@ -334,6 +336,7 @@ class PromptPack:
             verbose=verbose,
             max_retry=max_retry,
             reasoning=reasoning if reasoning is not None else {"enabled": False},
+            extra_body=dict(extra_body) if extra_body else {},
         )
         apply_expansion_params(config.expansion_strategy, expansion_params)
         return config

@@ -17,18 +17,21 @@ _MAX_BACKOFF_SECONDS = 8.0
 
 
 def with_reasoning(kwargs: dict[str, Any]) -> dict[str, Any]:
-    """Move the `reasoning` option into `extra_body`.
+    """Move `reasoning` into `extra_body` and merge any caller-supplied `extra_body`.
 
     The OpenAI SDK rejects unknown keyword arguments, and providers that support reasoning
-    expect the field in the request body. A disabled option is not sent at all, so strict
-    OpenAI-compatible endpoints never see it.
+    or custom chat-template flags expect them inside `extra_body`. A disabled `reasoning`
+    option and an empty `extra_body` are omitted so strict OpenAI-compatible endpoints never
+    see them.
     """
     out = dict(kwargs)
     reasoning = out.pop("reasoning", None)
+    extra_body = out.pop("extra_body", None)
+    merged_extra: dict[str, Any] = dict(extra_body) if extra_body else {}
     if reasoning and reasoning.get("enabled"):
-        extra_body = dict(out.get("extra_body") or {})
-        extra_body["reasoning"] = reasoning
-        out["extra_body"] = extra_body
+        merged_extra["reasoning"] = reasoning
+    if merged_extra:
+        out["extra_body"] = merged_extra
     return out
 
 

@@ -62,7 +62,7 @@ class CoTSCExpansionStrategy(BaseExpansionStrategy):
             )
 
         prompt = state.render(self.prompt_template, n_paths=self.n_paths)
-        self.logger.log_info(f"Prompt:\n{prompt}", style="dim")
+        self.logger.log_prompt(prompt)
         messages = [{"role": "user", "content": prompt}]
 
         response = create_completion(
@@ -77,6 +77,7 @@ class CoTSCExpansionStrategy(BaseExpansionStrategy):
             max_tokens=self.max_tokens,
             top_p=self.top_p,
             reasoning=self.reasoning,
+            extra_body=self.extra_body,
         )
         record_truncated_completions(
             type(self).__name__,
@@ -95,7 +96,7 @@ class CoTSCExpansionStrategy(BaseExpansionStrategy):
                     meta={"strategy": COT_SC_STRATEGY, "cot_index": choice_index},
                 )
             )
-            self.logger.log_info(f"CoT-SC path {choice_index + 1}: {text}", style="dim")
+            self.logger.log_response(text, title=f"Response (CoT-SC path {choice_index + 1})")
 
         if not nodes:
             raise ValueError(f"{type(self).__name__}: the model returned no usable completion.")

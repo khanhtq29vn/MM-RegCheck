@@ -138,6 +138,7 @@ def label_distribution(
     label_tokens: Mapping[str, ComplianceVerdict] = TOKEN_TO_VERDICT,
     diagnostics: list[str] | None = None,
     stage: str = "label elicitation",
+    extra_body: Mapping[str, Any] | None = None,
 ) -> dict[ComplianceVerdict, float]:
     """Ask for one label token and return its restricted-softmax distribution.
 
@@ -163,6 +164,8 @@ def label_distribution(
             `TOKEN_TO_VERDICT`.
         diagnostics: Optional run-level collector that receives the absent-label message.
         stage: Stage name used in the absent-label diagnostic.
+        extra_body: Optional provider-specific request-body fields (for example
+            `{"chat_template_kwargs": {"enable_thinking": False}}`). Omitted when empty.
 
     Returns:
         A mapping over all `ComplianceVerdict` members. Labels absent from the returned
@@ -177,6 +180,10 @@ def label_distribution(
     if max_retry < 1:
         raise ValueError(f"max_retry must be at least 1, got {max_retry}.")
 
+    request_kwargs: dict[str, Any] = {}
+    if extra_body:
+        request_kwargs["extra_body"] = dict(extra_body)
+
     last_error: Exception | None = None
     for attempt in range(1, max_retry + 1):
         try:
@@ -188,6 +195,7 @@ def label_distribution(
                 top_logprobs=top_logprobs,
                 temperature=temperature,
                 top_p=top_p,
+                **request_kwargs,
             )
             distribution = _restricted_softmax(
                 _top_logprobs_by_token(response.choices[0].logprobs), label_tokens
