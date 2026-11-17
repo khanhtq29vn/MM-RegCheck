@@ -1,70 +1,128 @@
-"""Module 3: Training-Free Bayesian Evidence Aggregation (TF-BEAR — Section 4.2).
+"""Public entry point of the TF-BEAR pipeline.
 
-Implements the exact mathematical log-odds filtering and majority-vote adjudication
-from Section 4.2 and Section 5.4 (Case Study). Hoang-An Vo can plug the VLM logprobs
-sampler directly into `TFBearAdjudicator.adjudicate_branches()`.
+The pipeline runs five stages over one claim and its retrieved regulatory context:
+
+    Stage 1  Prior        `mmregcheck.pillar2.prior`        P_prior(y | E_T)
+    Stage 2  Expansion    `mmregcheck.pillar2.expansion`    reasoning paths conditioned on C-hat
+    Stage 3  Scoring      `mmregcheck.pillar2.scoring`      P_posterior and Delta per path
+    Stage 4  Adjudication `mmregcheck.pillar2.adjudication` dual-threshold gate and vote
+    Stage 5  Explanation  `mmregcheck.pillar2.explainer`    rationale for the final verdict
+
+This module is orchestration only: it wires a `TFBearConfig` and an optional set of per-stage
+clients into the engine. The orchestration itself lives in `mmregcheck.pillar2.engine`, the
+strategy contracts in `mmregcheck.pillar2.base`, the shared state in
+`mmregcheck.pillar2.pipeline_state`, and the result types in `mmregcheck.pillar2.results`.
+
+    bear = TFBear.from_domain("Beauty", "standard", endpoint=EndpointConfig(...))
+    result = bear.run("A spa advertises a TCA chemical peel.", "Basic skincare scope only.")
 """
 
 from __future__ import annotations
 
-from collections import Counter
-from dataclasses import dataclass
+from collections.abc import Mapping
+from typing import Any
 
-from mmregcheck.schemas import ComplianceVerdict, TFBearBranchTrace
+from mmregcheck.pillar2.adjudication import TFBearAdjudicator
+from mmregcheck.pillar2.config import TFBearConfig
+from mmregcheck.pillar2.engine import StageClients, run_tfbear
+from mmregcheck.pillar2.llm import EndpointConfig
+from mmregcheck.pillar2.pipeline_state import TFBearState
+from mmregcheck.pillar2.prompts import (
+    ExpansionName,
+    load_prompt_pack,
+    resolve_domain,
+    resolve_expansion,
+)
+from mmregcheck.pillar2.results import TFBearAdjudicationResult, TFBearResult
+from mmregcheck.pillar2.sample_adapter import state_from_sample, to_submission_prediction
+from mmregcheck.schemas import MedRegSampleInput, RegulatoryDomain, SubmissionPrediction
+
+__all__ = [
+    "TFBear",
+    "TFBearAdjudicationResult",
+    "TFBearAdjudicator",
+    "TFBearConfig",
+    "TFBearResult",
+    "run_tfbear",
+]
 
 
-@dataclass(frozen=True, slots=True)
-class TFBearAdjudicationResult:
-    """Output of TF-BEAR branch pruning and majority voting."""
+class TFBear:
+    """The TF-BEAR pipeline: configure once, then run claims or benchmark samples.
 
-    final_verdict: ComplianceVerdict
-    surviving_branches: list[TFBearBranchTrace]
-    pruned_branches: list[TFBearBranchTrace]
+    Args:
+        config: Strategy wiring, endpoint selection, thresholds and global settings.
+        clients: Optional per-stage clients. When omitted, one client is built per stage from
+            the configured endpoints on the first run, which requires the endpoint's API-key
+            variable to be set.
+    """
 
+    def __init__(self, config: TFBearConfig, *, clients: StageClients | None = None) -> None:
+        self.config = config
+        self._clients = clients
 
-class TFBearAdjudicator:
-    """Executes TF-BEAR dual-threshold log-odds filtering and majority voting."""
+    @classmethod
+    def from_domain(
+        cls,
+        domain: RegulatoryDomain | str,
+        expansion: ExpansionName = "standard",
+        *,
+        endpoint: EndpointConfig | None = None,
+        expansion_params: Mapping[str, Any] | None = None,
+        **config_overrides: Any,
+    ) -> TFBear:
+        """Build a pipeline from one of the per-domain prompt packs.
 
-    def __init__(self, tau_posterior: float = 0.50, tau_delta: float = 0.50) -> None:
-        self.tau_posterior = tau_posterior
-        self.tau_delta = tau_delta
+        Args:
+            domain: Benchmark domain, as an enum value or its case-insensitive name.
+            expansion: One of `"standard"`, `"cot-sc"` or `"tot"`.
+            endpoint: Default endpoint of every stage.
+            expansion_params: Run-time parameters of the chosen expansion strategy, for example
+                `{"breadth_limit": 2}` for `"tot"` or `{"n_paths": 5}` for `"standard"`. A key
+                the strategy does not accept raises `ValueError`.
+            **config_overrides: Forwarded to `PromptPack.to_config`: thresholds, verbosity,
+                retry budget, reasoning payload, per-stage endpoints, explanation budget and the
+                shared/per-stage sampling settings.
 
-    def adjudicate_branches(
+        Raises:
+            ValueError: If the domain, the expansion variant or an expansion parameter is
+                unknown.
+        """
+        pack = load_prompt_pack(resolve_domain(domain), resolve_expansion(expansion))
+        return cls(
+            pack.to_config(
+                endpoint=endpoint,
+                expansion_params=expansion_params,
+                **config_overrides,
+            )
+        )
+
+    def run(self, text_claim: str, retrieved_regulatory_context: str = "") -> TFBearResult:
+        """Run the five stages over one claim and its retrieved regulatory context."""
+        return self._run_state(
+            TFBearState(
+                text_claim=text_claim,
+                retrieved_regulatory_context=retrieved_regulatory_context,
+            )
+        )
+
+    def run_sample(
         self,
-        branches: list[TFBearBranchTrace],
-    ) -> TFBearAdjudicationResult:
-        """Prune hallucinated branches failing the dual-threshold gate and vote."""
-        if not branches:
-            raise ValueError("TFBearAdjudicator requires at least one reasoning branch.")
+        sample: MedRegSampleInput,
+        *,
+        open_book: bool = True,
+    ) -> SubmissionPrediction:
+        """Run one benchmark sample and return a leaderboard prediction.
 
-        surviving: list[TFBearBranchTrace] = []
-        pruned: list[TFBearBranchTrace] = []
+        With `open_book=False` the sample's retrieved regulatory context is dropped before the
+        run, which gives the close-book (evidence-free) condition: the pipeline must decide from
+        the claim alone.
+        """
+        state = state_from_sample(sample)
+        if not open_book:
+            state.retrieved_regulatory_context = ""
+        result = self._run_state(state)
+        return to_submission_prediction(result, sample.sample_id)
 
-        for branch in branches:
-            if branch.passes_dual_threshold_gate(
-                tau_posterior=self.tau_posterior,
-                tau_delta=self.tau_delta,
-            ):
-                surviving.append(branch)
-            else:
-                pruned.append(branch)
-
-        active_pool = surviving if surviving else branches
-        vote_counts = Counter(b.predicted_verdict for b in active_pool)
-
-        # Strict Liability tie-breaking: prioritize Non-Compliant on ties
-        priority = {
-            ComplianceVerdict.NON_COMPLIANT: 3,
-            ComplianceVerdict.PARTLY_COMPLIANT: 2,
-            ComplianceVerdict.COMPLIANT: 1,
-        }
-        winner = max(
-            vote_counts.keys(),
-            key=lambda v: (vote_counts[v], priority[v]),
-        )
-
-        return TFBearAdjudicationResult(
-            final_verdict=winner,
-            surviving_branches=surviving,
-            pruned_branches=pruned,
-        )
+    def _run_state(self, state: TFBearState) -> TFBearResult:
+        return run_tfbear(state, self.config, clients=self._clients)
