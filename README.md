@@ -27,6 +27,15 @@ This repository hosts the official evaluation toolkit, data governance schemas, 
 
 ---
 
+## Notebooks (Self-Hosted Testing & Walkthrough)
+
+The [`notebooks/`](notebooks/) directory provides two Jupyter notebooks for testing `TF-BEAR` end-to-end without a paid API:
+
+1. **[`notebooks/local_llm_selfhost_sandbox.ipynb`](notebooks/local_llm_selfhost_sandbox.ipynb):** Self-hosts an OpenAI-compatible LLM endpoint with token logprobs support on free GPU compute (import the `.ipynb` into [Kaggle](https://www.kaggle.com/) via `File` → `Import Notebook`, enable a GPU accelerator, and copy the generated Base URL, API key, and model ID).
+2. **[`notebooks/getting_started_notebook.ipynb`](notebooks/getting_started_notebook.ipynb):** Interactive walkthrough covering endpoint configuration and sanity checks, single-claim `TF-BEAR` runs, `standard` / `cot-sc` / `tot` expansion experiments, evaluation on `data/dev_sample_5.jsonl`, and the equivalent `mmregcheck run-tfbear` CLI command.
+
+---
+
 ## Quickstart (Verify `TF-BEAR` Case Study & Validate Leaderboard Submissions)
 
 ```bash
@@ -89,6 +98,8 @@ uv run mmregcheck run-tfbear data/dev_sample_5.jsonl \
 | `--temperature`, `--top-p`, `--max-tokens` | Sampling of the expansion, scoring and explanation calls. |
 | `--elicitation-temperature`, `--elicitation-top-p`, `--top-logprobs` | Sampling of the label-token elicitation and how many top logprobs to request. |
 | `--expansion-param KEY=VALUE` | Expansion-specific setting (repeatable), for example `n_paths=5`. An unknown key fails before any sample starts. |
+| `--extra-body JSON` | Extra JSON object merged into the request `extra_body` payload (for example `'{"chat_template_kwargs": {"enable_thinking": false}}'`). |
+| `--tau-posterior`, `--tau-delta` | Posterior and log-odds delta thresholds of the dual gate (default `0.5`). |
 | `--verbose` | Log every stage to stderr. |
 | `--trace-path PATH` | Trace file, `<predictions>.trace.jsonl` by default. |
 | `--resume` | Skip the samples already present in the predictions file. |
@@ -115,7 +126,8 @@ uv run python scripts/run_tfbear_benchmark.py \
 for many claims or samples:
 
 ```python
-from mmregcheck.pillar2 import EndpointConfig, TFBear, TFBearConfig
+from mmregcheck.pillar2 import EndpointConfig, TFBear
+from mmregcheck.pillar2.prompts import load_prompt_pack
 
 endpoint = EndpointConfig(base_url="...", api_key_env="OPENAI_API_KEY", model="...")
 
@@ -127,15 +139,16 @@ result = bear.run(
 )
 print(result.verdict, result.explanation)
 
-# Or start from a hand-built configuration.
-bear = TFBear(TFBearConfig(endpoint=endpoint))
+# Or build and customize a TFBearConfig from a prompt pack.
+pack = load_prompt_pack("Beauty", "standard")
+bear = TFBear(pack.to_config(endpoint=endpoint, tau_posterior=0.5, tau_delta=0.5))
 result = bear.run("A facility advertises a treatment.")
 ```
 
 `from_domain` accepts `Beauty` / `Healthcare` (case-insensitive) and `standard`, `cot-sc` or
 `tot`; extra keyword arguments such as `tau_posterior`, `tau_delta`, `max_retry`, `verbose`,
-`temperature`, `top_p`, `max_tokens` and `expansion_params` (a mapping, for example
-`{"n_paths": 5}`) are forwarded to the prompt pack's `to_config`.
+`extra_body`, `temperature`, `top_p`, `max_tokens` and `expansion_params` (a mapping, for
+example `{"n_paths": 5}`) are forwarded to the prompt pack's `to_config`.
 
 For benchmark records, `run_sample` maps a `MedRegSampleInput` to a leaderboard
 `SubmissionPrediction`; `open_book=False` drops the retrieved regulatory context:
@@ -149,7 +162,7 @@ Every stage can target a different endpoint. The stage names are `prior`, `expan
 `adjudication` and `explanation`; stages without an override use `endpoint`:
 
 ```python
-config = TFBearConfig(
+config = pack.to_config(
     endpoint=endpoint,
     stage_endpoints={
         "scoring": EndpointConfig(base_url=..., api_key_env=..., model=...),
@@ -221,24 +234,39 @@ exported by `mmregcheck.pillar2`), implement its abstract method, and pass an in
 `TFBearConfig`:
 
 ```python
-from mmregcheck.pillar2 import BasePriorStrategy, TFBear, TFBearConfig
+from mmregcheck.pillar2 import (
+    BasePriorStrategy,
+    TFBear,
+    TFBearAdjudicationStrategy,
+    TFBearConfig,
+)
+from mmregcheck.pillar2.prompts import load_prompt_pack
 
 
 class RetrievalAwarePrior(BasePriorStrategy):
     def compute_prior(self, state, client, model): ...  # return {ComplianceVerdict: probability}
 
 
-config = TFBearConfig(prior_strategy=RetrievalAwarePrior(prompt_template="..."))
+pack = load_prompt_pack("Beauty", "standard")
+_, expansion, scoring, explanation = pack.build_strategies()
+config = TFBearConfig(
+    prior_strategy=RetrievalAwarePrior(prompt_template="..."),
+    expansion_strategy=expansion,
+    scoring_strategy=scoring,
+    adjudication_strategy=TFBearAdjudicationStrategy(),
+    explanation_strategy=explanation,
+    endpoint=endpoint,
+)
 bear = TFBear(config)
 ```
 
 The config validates that each custom object subclasses the base class of its stage and
-propagates `verbose`, `max_retry` and `reasoning` to it. Prompt templates are validated at
-construction: a template may only reference the placeholders listed in
+propagates `verbose`, `max_retry`, `reasoning` and `extra_body` to it. Prompt templates are
+validated at construction: a template may only reference the placeholders listed in
 `STATE_FIELDS` (`mmregcheck.pillar2.pipeline_state`), for example `{text_claim}`,
-`{retrieved_regulatory_context}`, `{state}`, `{paths}` and `{verdict}`. The defaults in
-`mmregcheck.pillar2.config` are domain-neutral; benchmark runs should use the per-domain packs
-in `mmregcheck.pillar2.prompts` (see above).
+`{retrieved_regulatory_context}`, `{state}`, `{paths}` and `{verdict}`. `mmregcheck.pillar2.config`
+defines no implicit domain-neutral pipeline; standard runs use the per-domain packs in
+`mmregcheck.pillar2.prompts` (see above).
 
 ---
 
