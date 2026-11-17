@@ -146,6 +146,7 @@ class SamplingSettings:
     elicitation_top_p: float | None = None
     top_logprobs: int | None = None
     verbose: bool = False
+    extra_body: dict[str, Any] | None = None
 
     def to_config_kwargs(self) -> dict[str, Any]:
         """Return only the overrides the operator set.
@@ -160,6 +161,8 @@ class SamplingSettings:
                 kwargs[name] = value
         if self.verbose:
             kwargs["verbose"] = True
+        if self.extra_body:
+            kwargs["extra_body"] = dict(self.extra_body)
         return kwargs
 
 
@@ -218,6 +221,25 @@ def parse_expansion_param(item: str) -> tuple[str, Any]:
             f"invalid value {raw_value!r} for --expansion-param {key!r}: expected an int, "
             "a float or a bool (true/false)."
         ) from None
+
+
+def parse_extra_body(raw: str | None) -> dict[str, Any] | None:
+    """Parse an optional `--extra-body` JSON object string into a dictionary.
+
+    Raises:
+        ValueError: If `raw` is not valid JSON or does not decode to a JSON object.
+    """
+    if raw is None:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid --extra-body JSON: {exc.msg}.") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(
+            f"invalid --extra-body: expected a JSON object, got {type(parsed).__name__}."
+        )
+    return parsed
 
 
 def parse_expansion_params(items: Sequence[str]) -> dict[str, Any]:
@@ -293,6 +315,8 @@ def describe_config(config: TFBearConfig) -> dict[str, Any]:
     for name in _EXPANSION_SETTING_NAMES:
         if hasattr(config.expansion_strategy, name):
             settings["expansion_strategy"][name] = getattr(config.expansion_strategy, name)
+    if config.extra_body:
+        settings["extra_body"] = dict(config.extra_body)
     return settings
 
 

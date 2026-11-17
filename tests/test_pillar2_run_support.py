@@ -437,3 +437,37 @@ def test_benchmark_script_rejects_a_bad_expansion_param(tmp_path: Path) -> None:
         benchmark.main([*common, "--expansion-param", "bogus=1"])
     with pytest.raises(SystemExit, match="expected an int"):
         benchmark.main([*common, "--expansion-param", "n_paths=two"])
+
+
+def test_benchmark_script_forwards_extra_body_and_rejects_invalid_json(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    samples = tmp_path / "samples.jsonl"
+    output = tmp_path / "predictions.jsonl"
+    _write_samples(samples)
+    captured = _install_script_capture(monkeypatch)
+    common = [
+        "--input",
+        str(samples),
+        "--out",
+        str(output),
+        "--base-url",
+        "https://endpoint.invalid/v1",
+        "--model",
+        "test-model",
+    ]
+
+    code = benchmark.main(
+        [
+            *common,
+            "--extra-body",
+            '{"chat_template_kwargs": {"enable_thinking": false}}',
+        ]
+    )
+    assert code == 0
+    assert captured["sampling"].extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
+
+    with pytest.raises(SystemExit, match="invalid --extra-body JSON"):
+        benchmark.main([*common, "--extra-body", "{bad-json"])
+    with pytest.raises(SystemExit, match="expected a JSON object"):
+        benchmark.main([*common, "--extra-body", "[1, 2]"])

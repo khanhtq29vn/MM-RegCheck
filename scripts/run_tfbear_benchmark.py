@@ -9,8 +9,9 @@ regulatory context and run the evidence-free condition; the default is open-book
 no domain-neutral pipeline: every run uses the pack of the resolved domain.
 
 The sampling flags (`--temperature`, `--top-p`, `--max-tokens`, `--elicitation-temperature`,
-`--elicitation-top-p`, `--top-logprobs`) and the repeatable `--expansion-param KEY=VALUE` are
-shared with `mmregcheck run-tfbear` through `mmregcheck.pillar2.run_support`; an omitted flag
+`--elicitation-top-p`, `--top-logprobs`), `--extra-body JSON`, and the repeatable
+`--expansion-param KEY=VALUE` are shared with `mmregcheck run-tfbear` through
+`mmregcheck.pillar2.run_support`; an omitted flag
 passes nothing, so the pack/config default applies. Next to the predictions file the script
 writes `<predictions>.trace.jsonl` (or `--trace-path`), one JSON object per sample plus a run
 settings header. Predictions and trace are flushed per sample, and `--resume` skips samples
@@ -29,6 +30,7 @@ from mmregcheck.pillar2.run_support import (
     SamplingSettings,
     default_trace_path,
     parse_expansion_params,
+    parse_extra_body,
     run_benchmark,
     validate_expansion_params,
 )
@@ -126,6 +128,14 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="Skip samples whose id is already in the predictions file and keep their lines.",
     )
+    parser.add_argument(
+        "--extra-body",
+        default=None,
+        help=(
+            "JSON object merged into every request's extra_body "
+            '(for example \'{"chat_template_kwargs": {"enable_thinking": false}}\').'
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -137,6 +147,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         resolved_expansion = resolve_expansion(args.expansion) if args.expansion else "standard"
         expansion_params = parse_expansion_params(args.expansion_param)
         validate_expansion_params(resolved_expansion, expansion_params)
+        parsed_extra_body = parse_extra_body(args.extra_body)
     except ValueError as exc:
         raise SystemExit(f"error: {exc}") from exc
 
@@ -165,6 +176,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             elicitation_top_p=args.elicitation_top_p,
             top_logprobs=args.top_logprobs,
             verbose=args.verbose,
+            extra_body=parsed_extra_body,
         ),
         expansion_params=expansion_params,
         close_book=args.close_book,

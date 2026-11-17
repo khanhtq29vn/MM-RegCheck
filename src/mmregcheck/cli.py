@@ -21,6 +21,7 @@ from mmregcheck.pillar2.run_support import (
     SamplingSettings,
     default_trace_path,
     parse_expansion_params,
+    parse_extra_body,
     run_benchmark,
     validate_expansion_params,
 )
@@ -187,6 +188,16 @@ def run_tfbear_command(
             help="Skip samples whose id is already in the predictions file and keep their lines.",
         ),
     ] = False,
+    extra_body: Annotated[
+        str | None,
+        typer.Option(
+            "--extra-body",
+            help=(
+                "JSON object merged into every request's extra_body "
+                '(for example \'{"chat_template_kwargs": {"enable_thinking": false}}\').'
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Run TF-BEAR over a samples file and write leaderboard-compatible predictions."""
     resolved_domain = _parse_domain_option(domain)
@@ -196,6 +207,10 @@ def run_tfbear_command(
         validate_expansion_params(resolved_expansion, expansion_params)
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="--expansion-param") from exc
+    try:
+        parsed_extra_body = parse_extra_body(extra_body)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--extra-body") from exc
 
     sampling = SamplingSettings(
         temperature=temperature,
@@ -205,6 +220,7 @@ def run_tfbear_command(
         elicitation_top_p=elicitation_top_p,
         top_logprobs=top_logprobs,
         verbose=verbose,
+        extra_body=parsed_extra_body,
     )
     samples = load_samples(samples_path)
     out_path = Path(output)
