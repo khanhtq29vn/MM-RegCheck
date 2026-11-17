@@ -18,6 +18,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from mmregcheck.pillar2.diagnostics import record_diagnostic
+from mmregcheck.pillar2.llm._retry import call_with_retry
 from mmregcheck.pillar2.llm.clients import ChatClient, ChoiceLogprobs
 from mmregcheck.schemas import ComplianceVerdict
 
@@ -184,37 +185,34 @@ def label_distribution(
     if extra_body:
         request_kwargs["extra_body"] = dict(extra_body)
 
-    last_error: Exception | None = None
-    for attempt in range(1, max_retry + 1):
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=list(messages),
-                max_tokens=LABEL_TOKEN_MAX_TOKENS,
-                logprobs=True,
-                top_logprobs=top_logprobs,
-                temperature=temperature,
-                top_p=top_p,
-                **request_kwargs,
-            )
-            distribution = _restricted_softmax(
-                _top_logprobs_by_token(response.choices[0].logprobs), label_tokens
-            )
-            _report_absent_labels(
-                distribution,
-                label_tokens,
-                top_logprobs=top_logprobs,
-                diagnostics=diagnostics,
-                stage=stage,
-            )
-            return distribution
-        except LogprobElicitationError:
-            raise
-        except Exception as exc:  # Retried below, then re-raised with attempt context.
-            last_error = exc
-            if attempt < max_retry:
-                time.sleep(2**attempt)
+    def _attempt_elicitation() -> dict[ComplianceVerdict, float]:
+        response = client.chat.completions.create(
+            model=model,
+            messages=list(messages),
+            max_tokens=LABEL_TOKEN_MAX_TOKENS,
+            logprobs=True,
+            top_logprobs=top_logprobs,
+            temperature=temperature,
+            top_p=top_p,
+            **request_kwargs,
+        )
+        choice_logprobs = response.choices[0].logprobs if response.choices else None
+        distribution = _restricted_softmax(_top_logprobs_by_token(choice_logprobs), label_tokens)
+        _report_absent_labels(
+            distribution,
+            label_tokens,
+            top_logprobs=top_logprobs,
+            diagnostics=diagnostics,
+            stage=stage,
+        )
+        return distribution
 
-    raise LogprobElicitationError(
-        f"Label distribution request failed after {max_retry} attempt(s): {last_error}"
-    ) from last_error
+    return call_with_retry(
+        _attempt_elicitation,
+        max_retry=max_retry,
+        sleep=time.sleep,
+        non_retryable_exceptions=(LogprobElicitationError,),
+        build_error=lambda attempts, last_exc: LogprobElicitationError(
+            f"Label distribution request failed after {attempts} attempt(s): {last_exc}"
+        ),
+    )

@@ -129,7 +129,7 @@ for many claims or samples:
 from mmregcheck.pillar2 import EndpointConfig, TFBear
 from mmregcheck.pillar2.prompts import load_prompt_pack
 
-endpoint = EndpointConfig(base_url="...", api_key_env="OPENAI_API_KEY", model="...")
+endpoint = EndpointConfig(base_url="...", env_var="OPENAI_API_KEY", model="...")
 
 # Per-domain pack: the draft's prompts and expansion hyperparameters.
 bear = TFBear.from_domain("Beauty", "standard", endpoint=endpoint)
@@ -165,8 +165,8 @@ Every stage can target a different endpoint. The stage names are `prior`, `expan
 config = pack.to_config(
     endpoint=endpoint,
     stage_endpoints={
-        "scoring": EndpointConfig(base_url=..., api_key_env=..., model=...),
-        "explanation": EndpointConfig(base_url=..., api_key_env=..., model=...),
+        "scoring": EndpointConfig(base_url=..., env_var=..., model=...),
+        "explanation": EndpointConfig(base_url=..., env_var=..., model=...),
     },
 )
 bear = TFBear(config)
@@ -215,7 +215,7 @@ from mmregcheck.pillar2 import EndpointConfig, TFBear
 from mmregcheck.pillar2.prompts import load_prompt_pack
 from mmregcheck.schemas import RegulatoryDomain
 
-endpoint = EndpointConfig(base_url="...", api_key_env="OPENAI_API_KEY", model="...")
+endpoint = EndpointConfig(base_url="...", env_var="OPENAI_API_KEY", model="...")
 bear = TFBear.from_domain(RegulatoryDomain.BEAUTY, "cot-sc", endpoint=endpoint)
 
 # Equivalent, if the pack itself is needed:

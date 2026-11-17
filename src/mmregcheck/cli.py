@@ -81,11 +81,11 @@ def run_tfbear_command(
     output: Annotated[
         str, typer.Option("--out", "-o", help="Output predictions .jsonl file.")
     ] = "predictions.jsonl",
-    api_key_env: Annotated[
+    env_var: Annotated[
         str,
         typer.Option(
             "--api-key-env",
-            help="Name of the environment variable holding the API key (never the key itself).",
+            help="Name of the environment variable holding the credential (never the value itself).",
         ),
     ] = "OPENAI_API_KEY",
     close_book: Annotated[
@@ -229,7 +229,7 @@ def run_tfbear_command(
         samples,
         domain=resolved_domain,
         expansion=resolved_expansion,
-        endpoint=EndpointConfig(base_url=base_url, api_key_env=api_key_env, model=model),
+        endpoint=EndpointConfig(base_url=base_url, env_var=env_var, model=model),
         tau_posterior=tau_posterior,
         tau_delta=tau_delta,
         sampling=sampling,

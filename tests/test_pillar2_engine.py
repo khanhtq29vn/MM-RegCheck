@@ -245,12 +245,12 @@ def test_build_stage_clients_honours_stage_overrides(
     monkeypatch.setattr("mmregcheck.pillar2.engine.build_client", fake_build_client)
     base = EndpointConfig(
         base_url="https://base.invalid/v1",
-        api_key_env="MMREG_TEST_API_KEY",
+        env_var="MMREG_TEST_API_KEY",
         model="base-model",
     )
     scoring = EndpointConfig(
         base_url="https://scoring.invalid/v1",
-        api_key_env="MMREG_TEST_API_KEY",
+        env_var="MMREG_TEST_API_KEY",
         model="scoring-model",
     )
     config = TFBearConfig(

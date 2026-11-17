@@ -81,7 +81,7 @@ class EndpointConfig:
 
     Attributes:
         base_url: Root URL of the endpoint, including its version prefix if any.
-        api_key_env: *Name* of the environment variable that holds the API key. The value of
+        env_var: *Name* of the environment variable that holds the credential. The value of
             the variable is never stored on the config, logged or echoed in errors.
         model: Model identifier the endpoint accepts.
         timeout: Optional request timeout in seconds.
@@ -89,7 +89,7 @@ class EndpointConfig:
     """
 
     base_url: str
-    api_key_env: str
+    env_var: str
     model: str
     timeout: float | None = None
     extra_headers: Mapping[str, str] = field(default_factory=dict)
@@ -97,8 +97,8 @@ class EndpointConfig:
     def __post_init__(self) -> None:
         if not self.base_url.strip():
             raise ValueError("EndpointConfig.base_url must not be empty.")
-        if not self.api_key_env.strip():
-            raise ValueError("EndpointConfig.api_key_env must name an environment variable.")
+        if not self.env_var.strip():
+            raise ValueError("EndpointConfig.env_var must name an environment variable.")
         if not self.model.strip():
             raise ValueError("EndpointConfig.model must not be empty.")
 
@@ -107,15 +107,15 @@ def build_client(config: EndpointConfig) -> ChatClient:
     """Build an OpenAI-compatible client for `config`.
 
     Raises:
-        ValueError: If the environment variable named by `config.api_key_env` is unset or
+        ValueError: If the environment variable named by `config.env_var` is unset or
             empty. This happens before the SDK is imported so a misconfigured endpoint fails
             immediately and identically for every endpoint.
         ImportError: If the optional SDK is not installed, with the pip command to install it.
     """
-    api_key = os.environ.get(config.api_key_env)
-    if not api_key:
+    secret = os.environ.get(config.env_var)
+    if not secret:
         raise ValueError(
-            f"Environment variable {config.api_key_env!r} is not set. It must hold the API "
+            f"Environment variable {config.env_var!r} is not set. It must hold the API "
             f"key for the endpoint at {config.base_url!r}."
         )
 
@@ -127,7 +127,7 @@ def build_client(config: EndpointConfig) -> ChatClient:
             "pip install 'mmregcheck[llm]'."
         ) from exc
 
-    kwargs: dict[str, Any] = {"base_url": config.base_url, "api_key": api_key}
+    kwargs: dict[str, Any] = {"base_url": config.base_url, "api_key": secret}
     if config.timeout is not None:
         kwargs["timeout"] = config.timeout
     if config.extra_headers:

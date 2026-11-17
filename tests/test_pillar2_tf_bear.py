@@ -277,7 +277,7 @@ def test_run_executes_the_five_stages_with_fake_clients() -> None:
 def test_from_domain_builds_every_prompt_pack(domain: str, expansion: ExpansionName) -> None:
     endpoint = pillar2.EndpointConfig(
         base_url="https://endpoint.invalid/v1",
-        api_key_env="MMREG_TEST_API_KEY",
+        env_var="MMREG_TEST_API_KEY",
         model="test-model",
     )
 
@@ -352,7 +352,7 @@ def test_tf_bear_reexports_the_legacy_names() -> None:
 def test_from_domain_applies_expansion_params() -> None:
     endpoint = pillar2.EndpointConfig(
         base_url="https://endpoint.invalid/v1",
-        api_key_env="MMREG_TEST_API_KEY",
+        env_var="MMREG_TEST_API_KEY",
         model="test-model",
     )
 
@@ -371,7 +371,7 @@ def test_from_domain_applies_expansion_params() -> None:
 def test_from_domain_rejects_an_unknown_expansion_param() -> None:
     endpoint = pillar2.EndpointConfig(
         base_url="https://endpoint.invalid/v1",
-        api_key_env="MMREG_TEST_API_KEY",
+        env_var="MMREG_TEST_API_KEY",
         model="test-model",
     )
 

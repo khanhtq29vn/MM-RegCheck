@@ -310,3 +310,56 @@ def test_synthesize_overall_explanation_still_works() -> None:
 
 def test_synthesize_overall_explanation_handles_no_items() -> None:
     assert synthesize_overall_explanation([]) == ("Compliant", "No techniques extracted.")
+
+
+def test_structured_non_retryable_client_error_fails_fast(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr("mmregcheck.pillar2.explainer.time.sleep", sleeps.append)
+
+    class _BadRequestError(RuntimeError):
+        status_code = 400
+
+    class _BadClient:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.chat = self
+            self.completions = self
+
+        def create(self, **kwargs: Any) -> _Response:
+            self.calls += 1
+            raise _BadRequestError("bad request")
+
+    client = _BadClient()
+    strategy = StructuredGenerativeExplanationStrategy(max_retry=3)
+    with pytest.raises(ValueError, match="failed after 1 attempts"):
+        strategy.explain(_state(), client, "fake-model")
+
+    assert client.calls == 1
+    assert sleeps == []
+
+
+def test_structured_none_content_exhausts_bounded_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr("mmregcheck.pillar2.explainer.time.sleep", sleeps.append)
+
+    class _EmptyContentClient:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.chat = self
+            self.completions = self
+
+        def create(self, **kwargs: Any) -> _Response:
+            self.calls += 1
+            return _Response(choices=[_Choice(_Message(None))])
+
+    client = _EmptyContentClient()
+    strategy = StructuredGenerativeExplanationStrategy(max_retry=2)
+    with pytest.raises(ValueError, match="failed after 2 attempts"):
+        strategy.explain(_state(), client, "fake-model")
+
+    assert client.calls == 2
+    assert sleeps == [2.0]

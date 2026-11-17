@@ -532,7 +532,7 @@ def _header_record(
         "expansion": expansion,
         "model": endpoint.model,
         "base_url": endpoint.base_url,
-        "api_key_env": endpoint.api_key_env,
+        "env_var": endpoint.env_var,
         "tau_posterior": tau_posterior,
         "tau_delta": tau_delta,
         "verbose": verbose,

@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 
 from mmregcheck.pillar2.base import BaseExplanationStrategy
 from mmregcheck.pillar2.llm import create_completion, with_reasoning
+from mmregcheck.pillar2.llm._retry import call_with_retry
 from mmregcheck.pillar2.pipeline_state import TFBearState
 from mmregcheck.schemas import TechniqueVerdictItem, TFBearBranchTrace, aggregate_strict_hierarchy
 
@@ -60,9 +61,6 @@ Do not mention variable names."""
 
 #: Default name registered with the API for the structured-output schema.
 DEFAULT_SCHEMA_NAME = "explanation_output"
-
-# Retries must stay bounded, so the exponential backoff is capped instead of doubling forever.
-_MAX_BACKOFF_SECONDS = 8.0
 
 
 class ExplanationOutput(BaseModel):
@@ -260,42 +258,40 @@ class StructuredGenerativeExplanationStrategy(BaseExplanationStrategy):
         }
         messages = [{"role": "user", "content": prompt}]
 
-        last_exc: Exception | None = None
-        for attempt in range(1, self.max_retry + 1):
-            try:
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    **with_reasoning(
-                        {
-                            "temperature": self.temperature,
-                            "max_tokens": self.max_tokens,
-                            "top_p": self.top_p,
-                            "reasoning": self.reasoning,
-                            "extra_body": self.extra_body,
-                            "response_format": response_format,
-                        }
-                    ),
-                )
-                raw = str(response.choices[0].message.content or "").strip()
-                parsed = _parse_json_object(raw, context=type(self).__name__)
-                validated = self.output_schema.model_validate(parsed)
-                result = validated.model_dump_json(indent=2)
-            except Exception as exc:
-                last_exc = exc
-                self.logger.log_warning(
-                    f"{type(self).__name__}: attempt {attempt}/{self.max_retry} failed: {exc}"
-                )
-                if attempt < self.max_retry:
-                    time.sleep(min(2.0**attempt, _MAX_BACKOFF_SECONDS))
-                continue
+        def _attempt_structured() -> str:
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                **with_reasoning(
+                    {
+                        "temperature": self.temperature,
+                        "max_tokens": self.max_tokens,
+                        "top_p": self.top_p,
+                        "reasoning": self.reasoning,
+                        "extra_body": self.extra_body,
+                        "response_format": response_format,
+                    }
+                ),
+            )
+            content = response.choices[0].message.content if response.choices else None
+            raw = str(content or "").strip()
+            parsed = _parse_json_object(raw, context=type(self).__name__)
+            validated = self.output_schema.model_validate(parsed)
+            return validated.model_dump_json(indent=2)
 
-            self.logger.log_explanation(result)
-            return result
-
-        raise ValueError(
-            f"{type(self).__name__}: failed after {self.max_retry} attempts. Last error: {last_exc}"
+        result = call_with_retry(
+            _attempt_structured,
+            max_retry=self.max_retry,
+            sleep=time.sleep,
+            on_retryable_error=lambda attempt, exc: self.logger.log_warning(
+                f"{type(self).__name__}: attempt {attempt}/{self.max_retry} failed: {exc}"
+            ),
+            build_error=lambda attempts, last_exc: ValueError(
+                f"{type(self).__name__}: failed after {attempts} attempts. Last error: {last_exc}"
+            ),
         )
+        self.logger.log_explanation(result)
+        return result
 
 
 def synthesize_overall_explanation(items: list[TechniqueVerdictItem]) -> tuple[str, str]:

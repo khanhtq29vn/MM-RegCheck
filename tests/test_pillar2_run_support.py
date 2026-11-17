@@ -41,7 +41,7 @@ COMPLIANT = ComplianceVerdict.COMPLIANT
 
 ENDPOINT = EndpointConfig(
     base_url="https://endpoint.invalid/v1",
-    api_key_env="MMREG_TEST_API_KEY",
+    env_var="MMREG_TEST_API_KEY",
     model="test-model",
 )
 

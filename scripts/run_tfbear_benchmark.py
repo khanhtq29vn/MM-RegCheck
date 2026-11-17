@@ -45,8 +45,9 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--model", required=True, help="Model identifier served by the endpoint.")
     parser.add_argument(
         "--api-key-env",
+        dest="env_var",
         default="OPENAI_API_KEY",
-        help="Name of the environment variable holding the API key (never the key itself).",
+        help="Name of the environment variable holding the credential (never the value itself).",
     )
     parser.add_argument(
         "--close-book",
@@ -157,7 +158,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     endpoint = EndpointConfig(
         base_url=args.base_url,
-        api_key_env=args.api_key_env,
+        env_var=args.env_var,
         model=args.model,
     )
     trace_path = args.trace_path if args.trace_path is not None else default_trace_path(args.out)

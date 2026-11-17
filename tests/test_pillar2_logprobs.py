@@ -275,3 +275,81 @@ def test_extra_body_is_forwarded_only_when_non_empty() -> None:
     assert completions.calls[1]["extra_body"] == {
         "chat_template_kwargs": {"enable_thinking": False}
     }
+
+
+class _StatusError(RuntimeError):
+    def __init__(
+        self, message: str, *, status_code: int, headers: dict[str, str] | None = None
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.response = type(
+            "_HttpResponse", (), {"status_code": status_code, "headers": headers}
+        )()
+
+
+def test_rate_limit_honours_retry_after_and_caps_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(logprobs.time, "sleep", sleeps.append)
+
+    class _RateLimitedCompletions:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def create(self, **kwargs: Any) -> _Response:
+            self.calls += 1
+            if self.calls == 1:
+                raise _StatusError("rate limited", status_code=429, headers={"Retry-After": "12"})
+            if self.calls == 2:
+                raise _StatusError("rate limited", status_code=429, headers={"Retry-After": "999"})
+            return _response({"0": 0.0, "1": 0.0, "2": 0.0})
+
+    completions = _RateLimitedCompletions()
+    distribution = label_distribution(
+        _FakeClient(completions),  # type: ignore[arg-type]
+        model="m",
+        messages=PROMPT,
+        max_retry=3,
+    )
+
+    assert sum(distribution.values()) == pytest.approx(1.0)
+    assert completions.calls == 3
+    assert sleeps == [12.0, 30.0]
+
+
+def test_non_retryable_client_error_fails_fast(monkeypatch: pytest.MonkeyPatch) -> None:
+    sleeps: list[float] = []
+    monkeypatch.setattr(logprobs.time, "sleep", sleeps.append)
+
+    class _UnauthorizedCompletions:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def create(self, **kwargs: Any) -> _Response:
+            self.calls += 1
+            raise _StatusError("unauthorized", status_code=401)
+
+    completions = _UnauthorizedCompletions()
+    with pytest.raises(LogprobElicitationError, match="failed after 1 attempt"):
+        label_distribution(
+            _FakeClient(completions),  # type: ignore[arg-type]
+            model="m",
+            messages=PROMPT,
+            max_retry=3,
+        )
+
+    assert completions.calls == 1
+    assert sleeps == []
+
+
+def test_empty_choices_raises_missing_logprobs_without_retry() -> None:
+    empty_response = _Response(None)
+    empty_response.choices = []
+    completions = _FakeCompletions([empty_response])
+
+    with pytest.raises(MissingLogprobsError):
+        label_distribution(_FakeClient(completions), model="m", messages=PROMPT, max_retry=3)
+
+    assert len(completions.calls) == 1

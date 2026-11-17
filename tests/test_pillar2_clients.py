@@ -16,7 +16,7 @@ KEY_ENV = "MMREG_TEST_API_KEY"
 def _config(**overrides: Any) -> EndpointConfig:
     values: dict[str, Any] = {
         "base_url": BASE_URL,
-        "api_key_env": KEY_ENV,
+        "env_var": KEY_ENV,
         "model": "test-model",
     }
     values.update(overrides)
@@ -96,8 +96,64 @@ def test_missing_optional_dependency_names_the_llm_extra(monkeypatch: pytest.Mon
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("base_url", "  "), ("api_key_env", ""), ("model", "")],
+    [("base_url", "  "), ("env_var", ""), ("model", "")],
 )
 def test_empty_config_fields_are_rejected(field: str, value: str) -> None:
     with pytest.raises(ValueError, match=field):
         _config(**{field: value})
+
+
+def test_create_completion_handles_rate_limit_and_fails_fast_on_401(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from mmregcheck.pillar2.llm import completion
+    from mmregcheck.pillar2.logger import TFBearLogger
+
+    sleeps: list[float] = []
+    monkeypatch.setattr(completion.time, "sleep", sleeps.append)
+
+    class _StatusError(RuntimeError):
+        def __init__(self, status_code: int, headers: dict[str, str] | None = None) -> None:
+            super().__init__(f"http {status_code}")
+            self.status_code = status_code
+            self.response = type("_Resp", (), {"status_code": status_code, "headers": headers})()
+
+    class _FakeClient:
+        def __init__(self, errors: list[Exception]) -> None:
+            self._errors = errors
+            self.calls = 0
+            self.chat = self
+            self.completions = self
+
+        def create(self, **kwargs: Any) -> object:
+            self.calls += 1
+            if self._errors:
+                raise self._errors.pop(0)
+            return object()
+
+    logger = TFBearLogger(verbose=False)
+    rate_limited_client = _FakeClient([_StatusError(429, {"Retry-After": "5"})])
+    completion.create_completion(
+        rate_limited_client,
+        model="m",
+        messages=[{"role": "user", "content": "hi"}],
+        max_retry=2,
+        logger=logger,
+        context="test",
+    )
+    assert rate_limited_client.calls == 2
+    assert sleeps == [5.0]
+
+    sleeps.clear()
+    auth_error_client = _FakeClient([_StatusError(401)])
+    with pytest.raises(RuntimeError, match="failed after 1 attempts"):
+        completion.create_completion(
+            auth_error_client,
+            model="m",
+            messages=[{"role": "user", "content": "hi"}],
+            max_retry=3,
+            logger=logger,
+            context="test",
+        )
+    assert auth_error_client.calls == 1
+    assert sleeps == []

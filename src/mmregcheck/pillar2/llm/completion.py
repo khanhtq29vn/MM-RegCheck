@@ -10,10 +10,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from mmregcheck.pillar2.llm._retry import call_with_retry
 from mmregcheck.pillar2.logger import TFBearLogger
-
-# Retries must stay bounded, so the exponential backoff is capped instead of doubling forever.
-_MAX_BACKOFF_SECONDS = 8.0
 
 
 def with_reasoning(kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -54,18 +52,16 @@ def create_completion(
     if max_retry < 1:
         raise ValueError(f"{context}: max_retry must be >= 1, got {max_retry}.")
 
-    last_exc: Exception | None = None
-    for attempt in range(1, max_retry + 1):
-        try:
-            return client.chat.completions.create(
-                model=model, messages=messages, **with_reasoning(kwargs)
-            )
-        except Exception as exc:
-            last_exc = exc
-            logger.log_warning(f"{context}: attempt {attempt}/{max_retry} failed: {exc}")
-            if attempt < max_retry:
-                time.sleep(min(2.0**attempt, _MAX_BACKOFF_SECONDS))
-
-    raise RuntimeError(
-        f"{context}: chat completion failed after {max_retry} attempts. Last error: {last_exc}"
+    return call_with_retry(
+        lambda: client.chat.completions.create(
+            model=model, messages=messages, **with_reasoning(kwargs)
+        ),
+        max_retry=max_retry,
+        sleep=time.sleep,
+        on_retryable_error=lambda attempt, exc: logger.log_warning(
+            f"{context}: attempt {attempt}/{max_retry} failed: {exc}"
+        ),
+        build_error=lambda attempts, last_exc: RuntimeError(
+            f"{context}: chat completion failed after {attempts} attempts. Last error: {last_exc}"
+        ),
     )

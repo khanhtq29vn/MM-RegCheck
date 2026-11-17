@@ -47,7 +47,7 @@ class _Explanation(BaseExplanationStrategy):
 def _endpoint(model: str = "test-model") -> EndpointConfig:
     return EndpointConfig(
         base_url="https://endpoint.invalid/v1",
-        api_key_env="MMREG_TEST_API_KEY",
+        env_var="MMREG_TEST_API_KEY",
         model=model,
     )
 
